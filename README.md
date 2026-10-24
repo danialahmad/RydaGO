@@ -1,37 +1,37 @@
 # RydaGO
 
-App navigasi komuniti untuk Malaysia, dibina dengan data terbuka dan dijalankan sendiri.
+A community navigation app for Malaysia, built on open data and fully self-hosted.
 
-- **Navigasi** belok demi belok dengan tiga pilihan laluan, had laju, amaran memandu laju dan anggaran harga tol
-- **Laporan komuniti**: polis, kesesakan, kemalangan, bahaya, kamera, jalan tutup, dengan pengesahan "Masih ada?"
-- **Dua bahasa**: English (lalai) dan Bahasa Melayu, termasuk arahan suara
-- **Tiada kunci API atau akaun pihak ketiga**: peta [OpenStreetMap](https://www.openstreetmap.org), laluan [Valhalla](https://github.com/valhalla/valhalla), carian [Nominatim](https://nominatim.org)
+- **Navigation** with turn-by-turn directions, three route options, speed limits, speeding alerts and estimated toll prices
+- **Community reports**: police, traffic jams, accidents, hazards, cameras and road closures, with "Still there?" confirmation
+- **Two languages**: English (default) and Bahasa Melayu, including voice guidance
+- **No API keys or third-party accounts**: maps from [OpenStreetMap](https://www.openstreetmap.org), routing by [Valhalla](https://github.com/valhalla/valhalla), search by [Nominatim](https://nominatim.org)
 
 ## Stack
 
-| Lapisan | Teknologi |
+| Layer | Technology |
 |---|---|
-| App (web dan Android) | [Flutter](https://flutter.dev) 3.47 / Dart, [Riverpod](https://riverpod.dev) 3 (state), `maplibre_gl` (peta), `geolocator` (GPS), `flutter_tts` (suara), `shared_preferences` |
-| Peta | [MapLibre](https://maplibre.org) dengan jubin vektor [OpenFreeMap](https://openfreemap.org) (data OpenStreetMap) |
-| API | [Go](https://go.dev) 1.26, router `chi`, `pgx`, migrasi `goose`, pengesahan JWT + bcrypt |
-| Pangkalan data | PostgreSQL 16 + [PostGIS](https://postgis.net) 3.5 (laporan, undi, pengguna) |
-| Laluan, arahan belokan, had laju, tol | [Valhalla](https://github.com/valhalla/valhalla) 3.5.1, data OSM Malaysia/Singapura/Brunei dari Geofabrik |
-| Carian alamat | [Nominatim](https://nominatim.org) 5.1 |
-| Web server | nginx 1.27 (menghidang app web) |
-| Pakej dan jalankan | Docker Compose: `db`, `valhalla`, `nominatim`, `api`, `web` |
+| App (web and Android) | [Flutter](https://flutter.dev) 3.47 / Dart, [Riverpod](https://riverpod.dev) 3 (state), `maplibre_gl` (map), `geolocator` (GPS), `flutter_tts` (voice), `shared_preferences` |
+| Map | [MapLibre](https://maplibre.org) with [OpenFreeMap](https://openfreemap.org) vector tiles (OpenStreetMap data) |
+| API | [Go](https://go.dev) 1.26, `chi` router, `pgx`, `goose` migrations, JWT + bcrypt auth |
+| Database | PostgreSQL 16 + [PostGIS](https://postgis.net) 3.5 (reports, votes, users) |
+| Routing, directions, speed limits, tolls | [Valhalla](https://github.com/valhalla/valhalla) 3.5.1, with Malaysia/Singapore/Brunei OSM data from Geofabrik |
+| Address search | [Nominatim](https://nominatim.org) 5.1 |
+| Web server | nginx 1.27 (serves the web app) |
+| Packaging | Docker Compose: `db`, `valhalla`, `nominatim`, `api`, `web` |
 
 ```
 Flutter app --> nginx :8080 (web)
      |
-     +--------> API Go :8081 --> PostGIS   (laporan, undi, akaun)
-                    |-----------> Valhalla  (laluan, had laju, tol)
-                    '-----------> Nominatim (carian alamat)
+     +--------> Go API :8081 --> PostGIS   (reports, votes, accounts)
+                    |---------> Valhalla  (routes, speed limits, tolls)
+                    '---------> Nominatim (address search)
 ```
 
-## Mula (hanya Docker diperlukan)
+## Getting started (Docker only)
 
-Anda **tak perlu** pasang Flutter, Go atau pangkalan data. Perlu: [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-dengan **8 GB RAM** diberi kepada Docker dan ~10 GB ruang kosong.
+You do **not** need Flutter, Go or a database installed. You need [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+with **8 GB of RAM** allocated to Docker and about 10 GB of free disk space.
 
 ```bash
 git clone https://github.com/Shahrizwansohimi/RydaGO.git
@@ -39,96 +39,99 @@ cd RydaGO
 docker compose up -d --build
 ```
 
-Kemudian buka **http://localhost:8080**.
+Then open **http://localhost:8080**.
 
-### Kali pertama
+### First run
 
-`--build` membina app web dan API (~5 minit). Selepas itu data peta Malaysia dimuat turun dan dibina di belakang tabir:
+`--build` builds the web app and the API (~5 minutes). After that, the Malaysia map data is downloaded and
+processed in the background:
 
-| Perkhidmatan | Fungsi | Masa kali pertama |
+| Service | Purpose | First-run time |
 |---|---|---|
-| `valhalla` | laluan, arahan belokan, had laju, tol | ~25 minit |
-| `nominatim` | carian alamat | ~70 minit |
+| `valhalla` | routes, directions, speed limits, tolls | ~25 minutes |
+| `nominatim` | address search | ~70 minutes |
 
-App boleh dibuka dari awal (peta, akaun, laporan berfungsi). Carian dan laluan memberi mesej "pelayan mungkin
-masih bersedia" sehingga kedua-duanya `healthy`:
+The app is usable straight away (map, accounts and reports work). Search and routing show a "server may still be
+starting" message until both services are `healthy`:
 
 ```bash
-docker compose ps                            # tunggu valhalla dan nominatim jadi (healthy)
-docker compose logs -f valhalla nominatim    # kemajuan
+docker compose ps                            # wait for valhalla and nominatim to be (healthy)
+docker compose logs -f valhalla nominatim    # progress
 ```
 
-Mula kedua dan seterusnya ambil beberapa saat. Data kekal dalam `./data` dan volum Docker.
+Later starts take a few seconds. Data persists in `./data` and in Docker volumes.
 
-## Cuba app
+## Trying it out
 
-1. **Menu** (kiri atas) > Settings > **Language** untuk tukar English / Bahasa Melayu.
-2. Settings > **Demo driving mode**: lokasi palsu supaya boleh cuba navigasi tanpa memandu atau GPS.
-3. Tekan **Where to?**, cari contohnya "Batu Caves", pilih laluan (harga tol ditunjuk pada setiap kad), tekan **Start**.
-4. Tekan butang oren untuk **lapor** (perlu akaun: Settings > Sign in > Register). Bila melepasi laporan orang lain,
-   app tanya "masih ada?".
-5. Kembangkan bar bawah semasa memandu untuk Share ETA, Mute dan End. Dalam mod demo ada butang **Detour**
-   untuk lihat kira semula laluan.
+1. **Menu** (top left) > Settings > **Language** switches between English and Bahasa Melayu.
+2. Settings > **Demo driving mode** uses a fake location, so you can try navigation without driving or GPS.
+3. Tap **Where to?**, search for e.g. "Batu Caves", pick a route (each card shows its toll price), and tap **Start**.
+4. Tap the orange button to **report** something (an account is required: Settings > Sign in > Register).
+   When you pass someone else's report, the app asks whether it is still there.
+5. While driving, expand the bottom bar for Share ETA, Mute and End. In demo mode a **Detour** button
+   shows off re-routing.
 
-Tekan lama pada peta (di web: klik dua kali) untuk meletak pin: Go atau Report di situ.
+Long-press the map (on web: double-click) to drop a pin, then choose Go or Report there.
 
-> **Harga tol ialah anggaran** (kereta kelas 1, ~11 sen/km), bukan kadar rasmi. **Had laju** hanya ada di jalan
-> yang OpenStreetMap tahu (kira-kira satu pertiga).
+> **Toll prices are estimates** (class 1 car, roughly 11 sen/km), not official rates. **Speed limits** only appear
+> on roads where OpenStreetMap has the data (about a third of them).
 
-### Dari telefon (Wi-Fi yang sama)
+### From a phone (same Wi-Fi)
 
-Lihat `docs/DEVELOPMENT.md` (bahagian "Akses dari telefon"): tetapkan `BIND_ADDR=0.0.0.0` dalam `.env`, buka port
-dalam firewall, dan buka `http://<ip-pc>:8080`. GPS sebenar perlu HTTPS; guna mod demo pada telefon.
+See `docs/DEVELOPMENT.md` ("Akses dari telefon"): set `BIND_ADDR=0.0.0.0` in `.env`, open the ports in your
+firewall, and browse to `http://<pc-ip>:8080`. Real GPS needs HTTPS, so use demo mode on the phone.
 
-## Dokumen
+## Documentation
 
-| Fail | Baca bila |
+Most docs are written in Bahasa Melayu.
+
+| File | Read it when |
 |---|---|
-| [`docs/FEATURES.md`](docs/FEATURES.md) | Senarai ciri, apa yang sudah dan belum dibuat |
-| [`docs/ROADMAP.md`](docs/ROADMAP.md) | Apa nak buat seterusnya, mengikut keutamaan |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Bagaimana ia disusun; di mana kod untuk apa |
-| [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | Cara kerja harian, resipi, perangkap |
-| [`docs/API.md`](docs/API.md) | Rujukan endpoint API |
-| [`docs/DESIGN.md`](docs/DESIGN.md) | Prinsip UI, warna, penjenamaan |
-| [`CLAUDE.md`](CLAUDE.md) | Arahan ringkas untuk pembantu AI (Claude Code) |
+| [`docs/FEATURES.md`](docs/FEATURES.md) | You want the feature list and what is done or missing |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | You want to know what to build next, by priority |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | You want to know how it fits together and where code lives |
+| [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | Day-to-day workflow, recipes, pitfalls |
+| [`docs/API.md`](docs/API.md) | API endpoint reference |
+| [`docs/DESIGN.md`](docs/DESIGN.md) | UI principles, colours, branding |
+| [`CLAUDE.md`](CLAUDE.md) | Short instructions for AI assistants (Claude Code) |
 
-## Struktur repo
+## Repository layout
 
 ```
-lib/                  app Flutter (models, services, state, ui; teks dalam lib/app/strings.dart)
-test/                 ujian Flutter
-backend/              API Go, migrasi pangkalan data, ujian
-docker/               Dockerfile web dan konfigurasi nginx
-docker-compose.yml    semua perkhidmatan
-docs/                 dokumentasi
-data/                 (diabaikan git) data OSM dan jubin Valhalla
-.env.example          pilihan konfigurasi (semua ada nilai lalai)
+lib/                  Flutter app (models, services, state, ui; UI text in lib/app/strings.dart)
+test/                 Flutter tests
+backend/              Go API, database migrations, tests
+docker/               web Dockerfile and nginx config
+docker-compose.yml    all services
+docs/                 documentation
+data/                 (git-ignored) OSM data and Valhalla tiles
+.env.example          configuration options (all have defaults)
 ```
 
-## Ujian
+## Tests
 
 ```bash
-flutter analyze && flutter test       # perlu Flutter dipasang (lihat docs/DEVELOPMENT.md)
+flutter analyze && flutter test       # needs Flutter installed (see docs/DEVELOPMENT.md)
 cd backend && docker run --rm -v "$PWD:/src" -w /src golang:1.26-alpine go test ./...
 ```
 
-Ujian pangkalan data sebenar: lihat `docs/DEVELOPMENT.md`.
+For the real-database tests, see `docs/DEVELOPMENT.md`.
 
-## Masalah biasa
+## Troubleshooting
 
-| Gejala | Sebab dan penyelesaian |
+| Symptom | Cause and fix |
 |---|---|
-| "port is already allocated" pada 8080/8081 | Program lain guna port itu. Tukar `WEB_PORT` dalam `.env`, atau hentikan program itu |
-| Carian/laluan: "mungkin masih bersedia" | Data belum siap. `docker compose ps`, tunggu `healthy` |
-| Build gagal kehabisan memori | Beri Docker 8 GB RAM (Docker Desktop > Settings > Resources) |
-| Nominatim berhenti sendiri semasa import | Biasanya kekurangan RAM. Lihat `docker compose logs nominatim` |
-| Mahu mula dari kosong | `docker compose down -v` dan `rm -rf data` (import semula ~1.5 jam) |
-| Telefon tak boleh buka | Firewall atau `BIND_ADDR`. Lihat `docs/DEVELOPMENT.md` |
+| "port is already allocated" on 8080/8081 | Another program uses that port. Change `WEB_PORT` in `.env`, or stop that program |
+| Search/routing: "server may still be starting" | Data is not ready yet. Run `docker compose ps` and wait for `healthy` |
+| Build fails with out-of-memory | Give Docker 8 GB of RAM (Docker Desktop > Settings > Resources) |
+| Nominatim stops by itself during import | Usually not enough RAM. Check `docker compose logs nominatim` |
+| Want to start from scratch | `docker compose down -v` and `rm -rf data` (re-import takes ~1.5 hours) |
+| Phone cannot open the app | Firewall or `BIND_ADDR`. See `docs/DEVELOPMENT.md` |
 
-Nama projek Docker kekal `waze-revamp` (lihat `name:` dalam `docker-compose.yml`) supaya volum data sedia ada
-tak hilang. Ia hanya nama dalaman.
+The Docker project name stays `waze-revamp` (see `name:` in `docker-compose.yml`) so existing data volumes are
+not lost. It is only an internal name.
 
-## Lesen dan kredit
+## License and credits
 
-Peta © penyumbang OpenStreetMap (ODbL), dihidangkan oleh OpenFreeMap. Laluan oleh Valhalla, carian oleh Nominatim.
-Projek bebas; tiada kaitan dengan Waze atau Google. *(Belum ada fail LICENSE: putuskan sebelum dikongsi.)*
+Map data © OpenStreetMap contributors (ODbL), served by OpenFreeMap. Routing by Valhalla, search by Nominatim.
+An independent project, not affiliated with Waze or Google. *(There is no LICENSE file yet: decide before sharing.)*
