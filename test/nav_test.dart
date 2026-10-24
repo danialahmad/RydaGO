@@ -1,46 +1,9 @@
-import 'package:flutter/material.dart' show Icons;
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
-import 'package:waze_revamp/main.dart';
+import 'package:waze_revamp/models/geo.dart';
+import 'package:waze_revamp/state/navigation.dart';
 
-/// A location provider that never touches the geolocator plugin, so tests can
-/// feed navigation exactly the GPS fixes they want.
-class FakeUserLoc extends UserLocNotifier {
-  @override
-  UserLoc build() => const UserLoc(LocStatus.active, LatLng(3.0, 101.0), 0, 90, 5);
-
-  void emit(UserLoc loc) => state = loc;
-}
-
-/// A straight, 11-point route running east along lat 3.0: ~111 m between points,
-/// ~1.11 km in total, with a start, a turn halfway and an arrival.
-RouteOption straightRoute() => RouteOption(
-      'Terpantas',
-      5,
-      1.1,
-      'Laluan terpantas',
-      [for (var i = 0; i <= 10; i++) LatLng(3.0, 101.0 + i * 0.001)],
-      const [
-        Maneuver('Mulakan perjalanan di Jalan A', 1, 0.55, 0),
-        Maneuver('Belok kanan menuju Jalan B', 10, 0.55, 5),
-        Maneuver('Anda telah sampai', 4, 0, 10),
-      ],
-    );
-
-UserLoc fix(double lat, double lng, {double? speed, double accuracy = 5}) =>
-    UserLoc(LocStatus.active, LatLng(lat, lng), speed, 90, accuracy);
-
-/// Starts navigation on [route] with a container whose GPS we control.
-(ProviderContainer, FakeUserLoc) startNav(RouteOption route) {
-  final loc = FakeUserLoc();
-  final container = ProviderContainer(
-    overrides: [userLocProvider.overrideWith(() => loc)],
-  );
-  addTearDown(container.dispose);
-  container.read(navProvider.notifier).start(route);
-  return (container, loc);
-}
+import 'helpers.dart';
 
 void main() {
   group('geometry helpers', () {
@@ -61,29 +24,35 @@ void main() {
   });
 
   group('NavState', () {
-    NavState at(double along, {bool arrived = false}) {
-      final r = straightRoute();
-      return NavState(
-        route: r,
-        cum: routeCumulative(r.points),
-        alongM: along,
-        pos: r.points.first,
-        arrived: arrived,
-      );
-    }
-
     test('upcoming is the next maneuver still ahead and counts down to it', () {
-      final s = at(300);
+      final r = straightRoute();
+      final s = navAt(r, 300);
       expect(s.upcoming!.text, 'Belok kanan menuju Jalan B');
       expect(s.distToUpcomingM, closeTo(555 - 300, 15));
-      expect(at(700).upcoming!.text, 'Anda telah sampai');
+      expect(navAt(r, 700).upcoming!.text, 'Anda telah sampai');
+    });
+
+    test('"then" is the maneuver right after the next one, when it follows closely', () {
+      final r = straightRoute();
+      // From 400 m the next turn is at ~555 m and the arrival 555 m later: too far for "then".
+      expect(navAt(r, 400).then, isNull);
+      // Past the turn the arrival is the next maneuver and nothing follows it.
+      expect(navAt(r, 700).then, isNull);
     });
 
     test('remaining minutes shrink with progress and are 0 once arrived', () {
-      expect(at(0).remainingMin, 5);
-      expect(at(555).remainingMin, 3); // half way: 2.5 min rounds up
-      expect(at(1000).remainingMin, 1);
-      expect(at(1110, arrived: true).remainingMin, 0);
+      final r = straightRoute();
+      expect(navAt(r, 0).remainingMin, 5);
+      expect(navAt(r, 555).remainingMin, 3); // half way: 2.5 min rounds up
+      expect(navAt(r, 1000).remainingMin, 1);
+      expect(navAt(r, 1110, arrived: true).remainingMin, 0);
+    });
+
+    test('progress runs from 0 to 1', () {
+      final r = straightRoute();
+      expect(navAt(r, 0).progress, 0);
+      expect(navAt(r, 555).progress, closeTo(0.5, 0.02));
+      expect(navAt(r, 5000).progress, 1); // clamped
     });
   });
 
@@ -155,33 +124,6 @@ void main() {
       final (container, _) = startNav(straightRoute());
       container.read(navProvider.notifier).stop();
       expect(container.read(navProvider), isNull);
-    });
-  });
-
-  group('models and the backend contract', () {
-    test('ReportType names are exactly the types the API accepts', () {
-      expect(
-        ReportType.values.map((t) => t.name).toSet(),
-        {'police', 'accident', 'jam', 'hazard', 'camera', 'closed'},
-      );
-    });
-
-    test('Place survives a JSON round trip (used for recent destinations)', () {
-      const p = Place('Batu Caves', 'Selayang, Selangor', Icons.place, LatLng(3.2379, 101.684));
-      final back = Place.fromJson(p.toJson());
-      expect(back.name, p.name);
-      expect(back.area, p.area);
-      expect(back.pos.latitude, p.pos.latitude);
-      expect(back.pos.longitude, p.pos.longitude);
-    });
-
-    test('UserLoc falls back to the sample position until there is a real fix', () {
-      const waiting = UserLoc(LocStatus.denied);
-      expect(waiting.isReal, isFalse);
-      expect(waiting.pos, kCenter);
-      final live = fix(5.4, 100.3);
-      expect(live.isReal, isTrue);
-      expect(live.pos, const LatLng(5.4, 100.3));
     });
   });
 }

@@ -192,6 +192,12 @@ func TestRouteReturnsThreeVariants(t *testing.T) {
 	if len(r.Maneuvers) != 3 {
 		t.Fatalf("got %d maneuvers", len(r.Maneuvers))
 	}
+	if r.Maneuvers[1].Street != "Jalan B" || r.Maneuvers[2].Street != "" {
+		t.Errorf("street names: %q / %q", r.Maneuvers[1].Street, r.Maneuvers[2].Street)
+	}
+	if r.Via != "Jalan B" { // the longest step (6 km) is on Jalan B
+		t.Errorf("via = %q, want Jalan B", r.Via)
+	}
 	for i, m := range r.Maneuvers {
 		if m.Text != wantText[i] || m.Index != i {
 			t.Errorf("maneuver %d: got %q idx %d", i, m.Text, m.Index)

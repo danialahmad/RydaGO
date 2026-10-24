@@ -1,0 +1,14 @@
+# Build context for docker/web.Dockerfile is the repo root. Keep it small.
+.git
+data/
+build/
+.dart_tool/
+.idea/
+backend/
+android/
+windows/
+test/
+docs/
+*.md
+.env
+.env.*

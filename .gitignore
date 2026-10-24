@@ -49,8 +49,8 @@ app.*.map.json
 
 # ---- Waze Revamp ----
 
-# Routing / geocoding data: 1.6 GB+, downloaded and built by `docker compose up`.
-/backend/valhalla/
+# Downloaded OSM data and built routing tiles (1.6 GB+). Docker recreates it on first start.
+/data/
 
 # Local secrets and overrides (compose has dev-only defaults, so none are required).
 .env

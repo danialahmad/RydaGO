@@ -33,14 +33,34 @@ func TestCORSAddsHeadersToNormalRequests(t *testing.T) {
 }
 
 func TestReportTypesMatchTheApp(t *testing.T) {
-	// The Flutter enum ReportType must use exactly these names.
+	// The Flutter enum ReportType (lib/models/report.dart) must use exactly these names.
 	want := []string{"police", "accident", "jam", "hazard", "camera", "closed"}
-	if len(validTypes) != len(want) {
-		t.Errorf("validTypes has %d entries, want %d", len(validTypes), len(want))
+	if len(reportSubtypes) != len(want) {
+		t.Errorf("reportSubtypes has %d entries, want %d", len(reportSubtypes), len(want))
 	}
 	for _, name := range want {
-		if !validTypes[name] {
-			t.Errorf("%q missing from validTypes", name)
+		if len(reportSubtypes[name]) == 0 {
+			t.Errorf("%q has no subtypes defined", name)
+		}
+	}
+}
+
+func TestValidReport(t *testing.T) {
+	good := [][2]string{
+		{"police", ""}, {"police", "hidden"}, {"jam", "standstill"},
+		{"hazard", "pothole"}, {"camera", "red_light"}, {"closed", "lane"},
+	}
+	for _, c := range good {
+		if !validReport(c[0], c[1]) {
+			t.Errorf("%v should be valid", c)
+		}
+	}
+	bad := [][2]string{
+		{"ufo", ""}, {"", ""}, {"police", "standstill"}, {"jam", "hidden"}, {"hazard", "POTHOLE"},
+	}
+	for _, c := range bad {
+		if validReport(c[0], c[1]) {
+			t.Errorf("%v should be rejected", c)
 		}
 	}
 }
@@ -50,6 +70,7 @@ func TestCreateReportValidation(t *testing.T) {
 	cases := []struct{ name, body string }{
 		{"bad json", `{`},
 		{"unknown type", `{"type":"ufo","lat":3.1,"lng":101.7}`},
+		{"subtype of another type", `{"type":"police","subtype":"standstill","lat":3.1,"lng":101.7}`},
 		{"lat out of range", `{"type":"jam","lat":91,"lng":101.7}`},
 		{"lng out of range", `{"type":"jam","lat":3.1,"lng":181}`},
 		{"empty", `{}`},

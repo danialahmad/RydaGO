@@ -41,6 +41,24 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
+  <script>
+    // MapLibre opens its OpenStreetMap/OpenFreeMap credit line fully expanded on
+    // load, which covers the menu button. Collapse it once; the small (i) button
+    // stays and can still be tapped to read the credits.
+    (function () {
+      var tries = 0;
+      var timer = setInterval(function () {
+        var el = document.querySelector('.maplibregl-ctrl-attrib.maplibregl-compact-show');
+        if (el) {
+          el.classList.remove('maplibregl-compact-show');
+          el.removeAttribute('open');
+          clearInterval(timer);
+        } else if (++tries > 120) {
+          clearInterval(timer);
+        }
+      }, 250);
+    })();
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

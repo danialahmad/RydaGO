@@ -1,0 +1,115 @@
+# Everything the app needs, in one command:
+#
+#   docker compose up -d --build
+#
+# then open http://localhost:8080 . No Flutter, Go or database install needed.
+#
+# FIRST START IS SLOW (about 1.5 hours, mostly waiting): Valhalla and Nominatim each
+# download the Malaysia/Singapore/Brunei OpenStreetMap extract (~240 MB) and build their
+# own data (Valhalla ~25 min, Nominatim ~70 min). The map, login and reports work right
+# away; route and address search start working once `docker compose ps` shows
+# valhalla / nominatim as "healthy". Data lives in ./data and Docker volumes, so later
+# starts take seconds.
+#
+# Settings can be overridden in a `.env` file next to this one (see .env.example).
+
+name: waze-revamp
+
+services:
+  # ---- Database -------------------------------------------------------------------
+  db:
+    image: postgis/postgis:16-3.5
+    environment:
+      POSTGRES_USER: waze
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wazedev}
+      POSTGRES_DB: waze
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # -h 127.0.0.1 matters: without it pg_isready answers during first-time init,
+      # before Postgres listens on TCP, and the API would start too early.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U waze -d waze"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # ---- Routing engine (turn-by-turn routes) ---------------------------------------
+  valhalla:
+    image: ghcr.io/gis-ops/docker-valhalla/valhalla:3.5.1
+    environment:
+      tile_urls: https://download.geofabrik.de/asia/malaysia-singapore-brunei-latest.osm.pbf
+      use_tiles_ignore_pbf: "True"
+      build_elevation: "False"
+      build_admins: "True"
+      build_time_zones: "True"
+      server_threads: "4"
+    ports:
+      - "127.0.0.1:8002:8002"
+    volumes:
+      - ./data/valhalla:/custom_files
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:8002/status >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 3h
+    restart: unless-stopped
+
+  # ---- Geocoder (address / place search) ------------------------------------------
+  nominatim:
+    image: mediagis/nominatim:5.1
+    shm_size: 1gb
+    environment:
+      PBF_URL: https://download.geofabrik.de/asia/malaysia-singapore-brunei-latest.osm.pbf
+      # "address" imports streets, areas and addresses only (fast, ~3 GB). "full" also
+      # imports shops, mosques, malls and other places (needs ~3x the time and disk).
+      # Changing it only takes effect on a fresh data volume.
+      IMPORT_STYLE: ${NOMINATIM_IMPORT_STYLE:-address}
+      THREADS: "4"
+      FREEZE: "true"
+      NOMINATIM_PASSWORD: ${NOMINATIM_PASSWORD:-nominatim-dev-only}
+    ports:
+      - "127.0.0.1:8088:8080"
+    volumes:
+      - nominatim-data:/var/lib/postgresql/16/main
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:8080/status >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 3h
+    restart: unless-stopped
+
+  # ---- API (Go) ---------------------------------------------------------------------
+  api:
+    build: ./backend
+    restart: on-failure
+    environment:
+      DATABASE_URL: postgres://waze:${POSTGRES_PASSWORD:-wazedev}@db:5432/waze?sslmode=disable
+      PORT: "8081"
+      # Dev default only. Set JWT_SECRET (32+ characters) in .env for anything shared.
+      JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me-0123456789abcdef}
+      VALHALLA_URL: http://valhalla:8002
+      NOMINATIM_URL: http://nominatim:8080
+    ports:
+      # Loopback by default. Set BIND_ADDR=0.0.0.0 in .env to reach it from a phone.
+      - "${BIND_ADDR:-127.0.0.1}:8081:8081"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ---- Web app (Flutter web, built inside Docker and served by nginx) ---------------
+  web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    ports:
+      - "${BIND_ADDR:-127.0.0.1}:${WEB_PORT:-8080}:80"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  nominatim-data:

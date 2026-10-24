@@ -22,9 +22,34 @@ import (
 //go:embed migrations/*.sql
 var migrations embed.FS
 
-var validTypes = map[string]bool{
-	"police": true, "accident": true, "jam": true,
-	"hazard": true, "camera": true, "closed": true,
+// reportSubtypes lists every report type and the subtypes it accepts. The first
+// subtype is the default the app sends. Keep in sync with ReportType in the app
+// (lib/models/report.dart); docs/API.md documents the same table.
+var reportSubtypes = map[string][]string{
+	"police":   {"visible", "hidden", "other_side"},
+	"accident": {"minor", "major", "other_side"},
+	"jam":      {"moderate", "heavy", "standstill"},
+	"hazard":   {"object", "pothole", "stopped_vehicle", "construction", "broken_light", "weather"},
+	"camera":   {"speed", "red_light"},
+	"closed":   {"road", "lane"},
+}
+
+// validReport reports whether typ is a known type and subtype is empty or one
+// of that type's subtypes.
+func validReport(typ, subtype string) bool {
+	subs, ok := reportSubtypes[typ]
+	if !ok {
+		return false
+	}
+	if subtype == "" {
+		return true
+	}
+	for _, s := range subs {
+		if s == subtype {
+			return true
+		}
+	}
+	return false
 }
 
 type server struct {
@@ -36,6 +61,7 @@ type server struct {
 type report struct {
 	ID        int64     `json:"id"`
 	Type      string    `json:"type"`
+	Subtype   string    `json:"subtype,omitempty"`
 	Lat       float64   `json:"lat"`
 	Lng       float64   `json:"lng"`
 	CreatedAt time.Time `json:"created_at"`
@@ -128,25 +154,27 @@ func (s *server) health(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) createReport(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Type string  `json:"type"`
-		Lat  float64 `json:"lat"`
-		Lng  float64 `json:"lng"`
+		Type    string  `json:"type"`
+		Subtype string  `json:"subtype"`
+		Lat     float64 `json:"lat"`
+		Lng     float64 `json:"lng"`
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<14)
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 		return
 	}
-	if !validTypes[in.Type] || in.Lat < -90 || in.Lat > 90 || in.Lng < -180 || in.Lng > 180 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid type or coordinates"})
+	if !validReport(in.Type, in.Subtype) || in.Lat < -90 || in.Lat > 90 || in.Lng < -180 || in.Lng > 180 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid type, subtype or coordinates"})
 		return
 	}
 	userID, _ := r.Context().Value(userCtxKey{}).(int64)
-	rep := report{Type: in.Type, Lat: in.Lat, Lng: in.Lng}
+	rep := report{Type: in.Type, Subtype: in.Subtype, Lat: in.Lat, Lng: in.Lng}
 	err := s.db.QueryRow(r.Context(),
-		`INSERT INTO reports (type, geom, user_id)
-		 VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, $4)
+		`INSERT INTO reports (type, subtype, geom, user_id)
+		 VALUES ($1, NULLIF($2, ''), ST_SetSRID(ST_MakePoint($3, $4), 4326)::geography, $5)
 		 RETURNING id, created_at`,
-		in.Type, in.Lng, in.Lat, userID).Scan(&rep.ID, &rep.CreatedAt)
+		in.Type, in.Subtype, in.Lng, in.Lat, userID).Scan(&rep.ID, &rep.CreatedAt)
 	if err != nil {
 		log.Printf("insert report: %v", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
@@ -169,7 +197,7 @@ func (s *server) nearbyReports(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := s.db.Query(r.Context(),
-		`SELECT id, type, ST_Y(geom::geometry), ST_X(geom::geometry), created_at
+		`SELECT id, type, COALESCE(subtype, ''), ST_Y(geom::geometry), ST_X(geom::geometry), created_at
 		 FROM reports
 		 WHERE ST_DWithin(geom, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, $3)
 		   AND created_at > now() - interval '2 hours'
@@ -185,7 +213,7 @@ func (s *server) nearbyReports(w http.ResponseWriter, r *http.Request) {
 	out := []report{}
 	for rows.Next() {
 		var rep report
-		if err := rows.Scan(&rep.ID, &rep.Type, &rep.Lat, &rep.Lng, &rep.CreatedAt); err != nil {
+		if err := rows.Scan(&rep.ID, &rep.Type, &rep.Subtype, &rep.Lat, &rep.Lng, &rep.CreatedAt); err != nil {
 			log.Printf("scan report: %v", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 			return

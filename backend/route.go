@@ -24,15 +24,17 @@ var valhallaURL = func() string {
 var valhallaClient = &http.Client{Timeout: 20 * time.Second}
 
 type maneuverOut struct {
-	Text  string  `json:"text"`
-	Type  int     `json:"type"`  // Valhalla maneuver type, used by the app to pick an icon
-	Km    float64 `json:"km"`    // length of this step
-	Index int     `json:"index"` // index into Points where the step begins
+	Text   string  `json:"text"`
+	Street string  `json:"street,omitempty"` // first street name of the step, shown in the banner
+	Type   int     `json:"type"`             // Valhalla maneuver type, used by the app to pick an icon
+	Km     float64 `json:"km"`               // length of this step
+	Index  int     `json:"index"`            // index into Points where the step begins
 }
 
 type routeOut struct {
 	Label     string        `json:"label"`
 	Note      string        `json:"note"`
+	Via       string        `json:"via,omitempty"` // the street the route follows for longest
 	Minutes   int           `json:"minutes"`
 	Km        float64       `json:"km"`
 	Points    [][2]float64  `json:"points"` // [lat, lng]
@@ -182,15 +184,24 @@ func askValhalla(ctx context.Context, fromLat, fromLng, toLat, toLng float64, au
 	}
 	var pts [][2]float64
 	maneuvers := []maneuverOut{}
+	via, viaKm := "", 0.0
 	for _, leg := range v.Trip.Legs {
 		offset := len(pts) // maneuver indexes are relative to their own leg's shape
 		pts = append(pts, decodePolyline6(leg.Shape)...)
 		for _, m := range leg.Maneuvers {
+			street := ""
+			if len(m.StreetNames) > 0 {
+				street = m.StreetNames[0]
+			}
+			if street != "" && m.Length > viaKm {
+				via, viaKm = street, m.Length
+			}
 			maneuvers = append(maneuvers, maneuverOut{
-				Text:  maneuverText(m.Type, m.StreetNames, m.RoundaboutExitCount),
-				Type:  m.Type,
-				Km:    m.Length,
-				Index: min(offset+m.BeginShapeIndex, len(pts)-1),
+				Text:   maneuverText(m.Type, m.StreetNames, m.RoundaboutExitCount),
+				Street: street,
+				Type:   m.Type,
+				Km:     m.Length,
+				Index:  min(offset+m.BeginShapeIndex, len(pts)-1),
 			})
 		}
 	}
@@ -202,6 +213,7 @@ func askValhalla(ctx context.Context, fromLat, fromLng, toLat, toLng float64, au
 		Km:        float64(int(v.Trip.Summary.Length*10+0.5)) / 10,
 		Points:    pts,
 		Maneuvers: maneuvers,
+		Via:       via,
 	}, nil
 }
 
