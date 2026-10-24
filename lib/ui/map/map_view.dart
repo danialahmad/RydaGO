@@ -1,12 +1,15 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../../app/config.dart';
 import '../../app/theme.dart';
+import '../../models/geo.dart';
 import '../../models/place.dart';
+import '../../models/report.dart';
 import '../../models/route.dart';
 import '../../models/user_loc.dart';
 import '../../state/navigation.dart';
@@ -35,6 +38,12 @@ class _MapViewState extends ConsumerState<MapView> {
   bool _dirty = false;
   Circle? _userDot;
   Circle? _userHalo;
+  // A fill, not a symbol: symbols fade back in each time they move on web, so an
+  // arrow icon blinked on every fix.
+  Fill? _userArrow; // direction of travel, drawn on the dot while navigating
+  List<Symbol> _reportSymbols = const [];
+  List<Circle> _reportDots = const [];
+  String _reportsKey = ''; // what the drawn report markers show
   bool _centeredOnFix = false;
   double _bearing = 0;
   String? _initialStyle;
@@ -45,18 +54,26 @@ class _MapViewState extends ConsumerState<MapView> {
 
   // ---- drawing -----------------------------------------------------------------
 
-  Future<void> _sync() async {
+  /// Redraws everything, or with [reportsOnly] just the report markers (the
+  /// reports refresh on a timer; redrawing the route each time made it blink).
+  Future<void> _sync({bool reportsOnly = false}) async {
     final c = _controller;
     if (c == null || !_styleReady) return;
     if (_syncing) {
-      _dirty = true;
+      _dirty = true; // the full redraw that follows covers the reports too
       return;
     }
     _syncing = true;
     try {
+      var full = !reportsOnly;
       do {
-        _dirty = false;
-        await _draw(c);
+        if (full) {
+          _dirty = false;
+          await _draw(c);
+        } else {
+          await _drawReports(c);
+        }
+        full = true;
       } while (_dirty);
     } catch (_) {
       // The map was disposed mid-draw; nothing to do.
@@ -66,7 +83,6 @@ class _MapViewState extends ConsumerState<MapView> {
   }
 
   Future<void> _draw(MapLibreMapController c) async {
-    final reports = ref.read(reportsProvider);
     final pin = ref.read(pinProvider);
     final dest = ref.read(destinationProvider);
     final routesAsync = ref.read(routesProvider);
@@ -80,7 +96,10 @@ class _MapViewState extends ConsumerState<MapView> {
 
     await c.clearLines();
     await c.clearCircles();
+    await c.clearFills();
     if (_imagesReady) await c.clearSymbols();
+    _reportSymbols = const [];
+    _reportDots = const [];
 
     if (dest != null && (navRoute != null || routes.isNotEmpty)) {
       if (navRoute == null) {
@@ -104,9 +123,6 @@ class _MapViewState extends ConsumerState<MapView> {
 
     if (_imagesReady) {
       await c.addSymbols([
-        for (final r in reports)
-          SymbolOptions(
-              geometry: r.pos, iconImage: reportImageName(r.type), iconSize: 0.42),
         if (dest != null)
           SymbolOptions(
               geometry: dest.pos, iconImage: destinationImageName, iconSize: 0.46),
@@ -116,11 +132,11 @@ class _MapViewState extends ConsumerState<MapView> {
     } else {
       // Icon images failed to build: fall back to plain coloured dots.
       await c.addCircles([
-        for (final r in reports) _dot(r.pos, r.type.color, 11),
         if (dest != null) _dot(dest.pos, AppColors.danger, 10),
         if (pin != null && !navigating) _dot(pin, const Color(0xFF6C3FC5), 12),
       ]);
     }
+    await _drawReports(c);
 
     // Kept as handles so the drive can move the dot without a full redraw.
     final here = _userPos;
@@ -130,7 +146,13 @@ class _MapViewState extends ConsumerState<MapView> {
       circleRadius: 22,
       circleOpacity: 0.22,
     ));
-    _userDot = await c.addCircle(_dot(here, AppColors.brand, 9, stroke: 3));
+    _userDot = await c.addCircle(_dot(here, AppColors.brand, navigating ? 12 : 9, stroke: 3));
+    _userArrow = navigating
+        ? await c.addFill(FillOptions(
+            geometry: [arrowPolygon(here, _bearing)],
+            fillColor: '#FFFFFF',
+            fillOutlineColor: '#FFFFFF'))
+        : null;
 
     // The first GPS fix can arrive before the map is ready; centre once now.
     if (!_centeredOnFix &&
@@ -141,6 +163,34 @@ class _MapViewState extends ConsumerState<MapView> {
       await c.animateCamera(CameraUpdate.newLatLngZoom(here, 14));
     }
   }
+
+  /// Replaces the report markers, leaving the route, destination and dot alone.
+  Future<void> _drawReports(MapLibreMapController c) async {
+    final reports = ref.read(reportsProvider);
+    if (_reportSymbols.isNotEmpty) await c.removeSymbols(_reportSymbols);
+    if (_reportDots.isNotEmpty) await c.removeCircles(_reportDots);
+    _reportSymbols = const [];
+    _reportDots = const [];
+    _reportsKey = _keyOf(reports);
+    if (reports.isEmpty) return;
+    if (_imagesReady) {
+      _reportSymbols = await c.addSymbols([
+        for (final r in reports)
+          SymbolOptions(
+              geometry: r.pos, iconImage: reportImageName(r.type), iconSize: 0.42),
+      ]);
+    } else {
+      _reportDots = await c.addCircles([
+        for (final r in reports) _dot(r.pos, r.type.color, 11),
+      ]);
+    }
+  }
+
+  /// Everything a report marker shows. A refresh that changes only votes
+  /// leaves the markers as they are.
+  static String _keyOf(List<Report> reports) => [
+        for (final r in reports) '${r.id}:${r.type.name}:${r.lat},${r.lng}',
+      ].join('|');
 
   CircleOptions _dot(LatLng p, Color color, double radius, {double stroke = 2.5}) =>
       CircleOptions(
@@ -168,12 +218,24 @@ class _MapViewState extends ConsumerState<MapView> {
     final c = _controller;
     if (c == null) return;
     if ((n.speedKmh ?? 0) > 5 && n.heading != null) _bearing = n.heading!;
+    final camera = CameraUpdate.newCameraPosition(
+        CameraPosition(target: n.pos, zoom: 17, bearing: _bearing, tilt: 45));
     try {
-      final dot = _userDot, halo = _userHalo;
+      // On web animateCamera is a flyTo, which dips the zoom on its way: every
+      // fix pulled the map just under zoom 17, swapping tile levels, and it
+      // blinked. Jump instead; the camera follows the dot fix by fix.
+      if (kIsWeb) {
+        await c.moveCamera(camera);
+      } else {
+        await c.animateCamera(camera);
+      }
+      final dot = _userDot, halo = _userHalo, arrow = _userArrow;
       if (dot != null) await c.updateCircle(dot, CircleOptions(geometry: n.pos));
       if (halo != null) await c.updateCircle(halo, CircleOptions(geometry: n.pos));
-      await c.animateCamera(CameraUpdate.newCameraPosition(
-          CameraPosition(target: n.pos, zoom: 17, bearing: _bearing, tilt: 45)));
+      if (arrow != null) {
+        await c.updateFill(
+            arrow, FillOptions(geometry: [arrowPolygon(n.pos, _bearing)]));
+      }
     } catch (_) {
       // Cosmetic; the next fix tries again.
     }
@@ -242,7 +304,10 @@ class _MapViewState extends ConsumerState<MapView> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(reportsProvider, (_, _) => _sync());
+    ref.listen(reportsProvider, (_, next) {
+      // Refreshed every 15 s, mostly with the same reports.
+      if (_keyOf(next) != _reportsKey) _sync(reportsOnly: true);
+    });
     ref.listen(pinProvider, (_, _) => _sync());
     ref.listen(routeIndexProvider, (_, _) => _sync());
     ref.listen(routesProvider, (_, _) => _sync());

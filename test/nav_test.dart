@@ -1,7 +1,11 @@
+import 'package:flutter/material.dart' show Icons;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:rydago/models/geo.dart';
+import 'package:rydago/models/place.dart';
 import 'package:rydago/state/navigation.dart';
+import 'package:rydago/state/trip.dart';
 
 import 'helpers.dart';
 
@@ -10,6 +14,18 @@ void main() {
     test('haversineM is about 111 m for 0.001 degrees of longitude near the equator', () {
       final d = haversineM(const LatLng(3.0, 101.0), const LatLng(3.0, 101.001));
       expect(d, closeTo(111, 2));
+    });
+
+    test('arrowPolygon is a closed ring whose tip points along the bearing', () {
+      const at = LatLng(3.0, 101.0);
+      final east = arrowPolygon(at, 90, lengthM: 10);
+      expect(east.length, 5);
+      expect(east.first, east.last);
+      expect(haversineM(at, east.first), closeTo(5, 0.1));
+      expect(east.first.longitude, greaterThan(at.longitude)); // tip east
+      expect(east.first.latitude, closeTo(at.latitude, 1e-9));
+      final north = arrowPolygon(at, 0, lengthM: 10);
+      expect(north.first.latitude, greaterThan(at.latitude)); // tip north
     });
 
     test('routeCumulative starts at 0 and grows along the route', () {
@@ -118,6 +134,46 @@ void main() {
       expect(container.read(navProvider)!.speedKmh, closeTo(36, 0.01));
       loc.emit(fix(3.0, 101.003));
       expect(container.read(navProvider)!.speedKmh, isNull);
+    });
+
+    group('destination across a divided road', () {
+      const dest = LatLng(3.0002, 101.003); // end of uTurnRoute, other carriageway
+
+      (ProviderContainer, FakeUserLoc) startUTurn() {
+        final (container, loc) = startNav(uTurnRoute());
+        container
+            .read(destinationProvider.notifier)
+            .set(const Place('Kedai', '', Icons.store, dest));
+        return (container, loc);
+      }
+
+      test('passing it on the near side is not arriving', () {
+        final (container, loc) = startUTurn();
+        loc.emit(fix(3.0, 101.003, speed: 10)); // ~22 m from the destination
+        final nav = container.read(navProvider)!;
+        expect(nav.arrived, isFalse);
+        expect(nav.alongM, closeTo(333, 10));
+        expect(nav.upcoming!.text, 'Buat pusingan U');
+      });
+
+      test('a fix drifting towards the return leg stays on our carriageway', () {
+        final (container, loc) = startUTurn();
+        // Closer to the return leg (~8 m) than to the outbound one (~14 m), but
+        // heading east, which only the outbound leg does.
+        loc.emit(fix(3.00013, 101.0032, speed: 10));
+        final nav = container.read(navProvider)!;
+        expect(nav.arrived, isFalse);
+        expect(nav.alongM, closeTo(355, 10));
+      });
+
+      test('arrives after the U-turn, at the end of the route', () {
+        final (container, loc) = startUTurn();
+        loc.emit(fix(3.0, 101.004, speed: 10));
+        loc.emit(fix(3.0002, 101.004, speed: 10, heading: 270));
+        expect(container.read(navProvider)!.arrived, isFalse);
+        loc.emit(fix(3.0002, 101.0031, speed: 10, heading: 270));
+        expect(container.read(navProvider)!.arrived, isTrue);
+      });
     });
 
     test('stop clears the navigation state', () {

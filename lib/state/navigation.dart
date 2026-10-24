@@ -16,6 +16,9 @@ import 'user_loc.dart';
 const kOffRouteM = 50.0; // further than this from the route counts as off it
 const kHardOffRouteM = 120.0; // so far off that we re-route straight away
 const kArriveM = 30.0;
+const kArriveNearEndM =
+    100.0; // being near the destination only counts with this little route left
+const kHeadingMinMps = 2.0; // below this GPS heading is noise
 const kMaxAccuracyM = 100.0; // ignore fixes less precise than this
 const kRerouteCooldown = Duration(seconds: 8);
 const kReportOnRouteM =
@@ -190,21 +193,27 @@ class NavNotifier extends Notifier<NavState?> {
     if (s == null || s.arrived || !loc.isReal) return;
     if ((loc.accuracy ?? 0) > kMaxAccuracyM) return;
 
-    final p = _project(loc.pos, s);
-    final onRoute = p.distM <= kOffRouteM;
     final speed = loc.speed;
+    final heading =
+        loc.heading != null && loc.heading! >= 0 ? loc.heading : null;
+    final moving = speed != null && speed >= kHeadingMinMps;
+    final p = _project(loc.pos, s, moving ? heading : null);
+    final onRoute = p.distM <= kOffRouteM;
     final next = s.copyWith(
       alongM: p.alongM,
       seg: p.seg,
       pos: onRoute ? p.snapped : loc.pos,
       offRouteM: p.distM,
       speedKmh: speed == null || speed < 0 ? null : speed * 3.6,
-      heading: loc.heading != null && loc.heading! >= 0 ? loc.heading : null,
+      heading: heading,
     );
 
+    // Being close to the destination is not arriving when it lies across a
+    // divided road: the route still runs on to a U-turn and back.
     final dest = ref.read(destinationProvider);
-    final atDestination =
-        dest != null && haversineM(loc.pos, dest.pos) <= kArriveM;
+    final atDestination = dest != null &&
+        haversineM(loc.pos, dest.pos) <= kArriveM &&
+        next.remainingM <= kArriveNearEndM;
     if (atDestination ||
         (next.remainingM <= kArriveM && p.distM <= kOffRouteM)) {
       state = next.copyWith(alongM: s.totalM, arrived: true);
@@ -271,8 +280,9 @@ class NavNotifier extends Notifier<NavState?> {
   }
 
   /// Projects [p] onto the route polyline. Looks near the current segment first
-  /// so routes that cross themselves do not make progress jump around.
-  RouteProjection _project(LatLng p, NavState s) {
+  /// so routes that cross themselves do not make progress jump around. With a
+  /// [heading], legs of the route running the other way are ignored.
+  RouteProjection _project(LatLng p, NavState s, double? heading) {
     final pts = s.route.points;
     final near = projectOnRoute(
       p,
@@ -280,9 +290,10 @@ class NavNotifier extends Notifier<NavState?> {
       s.cum,
       fromSeg: s.seg - 3,
       toSeg: s.seg + 60,
+      headingDeg: heading,
     );
     if (near.distM <= kOffRouteM) return near;
-    final all = projectOnRoute(p, pts, s.cum);
+    final all = projectOnRoute(p, pts, s.cum, headingDeg: heading);
     return all.distM < near.distM ? all : near;
   }
 }

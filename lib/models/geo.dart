@@ -24,6 +24,24 @@ List<double> routeCumulative(List<LatLng> pts) {
   return cum;
 }
 
+/// A navigation arrow [lengthM] long, centred on [at] and pointing to
+/// [bearingDeg], as a closed polygon ring for the map.
+List<LatLng> arrowPolygon(LatLng at, double bearingDeg, {double lengthM = 10}) {
+  const mLat = 110540.0;
+  final mLng = 111320.0 * math.cos(at.latitude * math.pi / 180);
+  final b = bearingDeg * math.pi / 180;
+  final h = lengthM / 2;
+  // Tip, right wing, notch, left wing, back to the tip. Metres, x right, y ahead.
+  final shape = [(0.0, h), (0.75 * h, -h), (0.0, -0.45 * h), (-0.75 * h, -h), (0.0, h)];
+  return [
+    for (final (x, y) in shape)
+      LatLng(
+        at.latitude + (-x * math.sin(b) + y * math.cos(b)) / mLat,
+        at.longitude + (x * math.cos(b) + y * math.sin(b)) / mLng,
+      ),
+  ];
+}
+
 /// Where a point lands on a route line.
 class RouteProjection {
   const RouteProjection(this.seg, this.alongM, this.distM, this.snapped);
@@ -37,12 +55,18 @@ class RouteProjection {
 /// Projects [p] onto the segments [fromSeg]..[toSeg] of the route (inclusive) and
 /// returns the closest spot. Flat-earth maths in metres around [p]: plenty accurate
 /// at the scale of a route and far cheaper than haversine per segment.
+///
+/// With [headingDeg] (direction of travel), segments pointing more than 90° away
+/// from it are skipped: after a U-turn the route comes back on the other
+/// carriageway a few metres away, and a fix must not jump onto that leg. If no
+/// segment qualifies (driving the route backwards) the heading is ignored.
 RouteProjection projectOnRoute(
   LatLng p,
   List<LatLng> pts,
   List<double> cum, {
   int fromSeg = 0,
   int? toSeg,
+  double? headingDeg,
 }) {
   const mLat = 110540.0;
   final mLng = 111320.0 * math.cos(p.latitude * math.pi / 180);
@@ -58,6 +82,11 @@ RouteProjection projectOnRoute(
     final by = (pts[i + 1].latitude - p.latitude) * mLat;
     final dx = bx - ax, dy = by - ay;
     final len2 = dx * dx + dy * dy;
+    if (headingDeg != null && len2 > 0) {
+      final segDeg = math.atan2(dx, dy) * 180 / math.pi;
+      final diff = (segDeg - headingDeg).abs() % 360;
+      if (math.min(diff, 360 - diff) > 90) continue;
+    }
     final t = len2 == 0 ? 0.0 : (-(ax * dx + ay * dy) / len2).clamp(0.0, 1.0);
     final cx = ax + t * dx, cy = ay + t * dy;
     final d = math.sqrt(cx * cx + cy * cy);
@@ -70,5 +99,6 @@ RouteProjection projectOnRoute(
       );
     }
   }
-  return best!;
+  return best ??
+      projectOnRoute(p, pts, cum, fromSeg: fromSeg, toSeg: toSeg);
 }

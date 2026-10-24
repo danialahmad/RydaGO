@@ -34,8 +34,28 @@ RouteOption straightRoute() => RouteOption(
       limits: const [SpeedLimit(0, 4, 60)],
     );
 
-UserLoc fix(double lat, double lng, {double? speed, double accuracy = 5}) =>
-    UserLoc(LocStatus.active, LatLng(lat, lng), speed, 90, accuracy);
+UserLoc fix(double lat, double lng,
+        {double? speed, double heading = 90, double accuracy = 5}) =>
+    UserLoc(LocStatus.active, LatLng(lat, lng), speed, heading, accuracy);
+
+/// A route to a destination across a divided road: ~555 m east along lat 3.0,
+/// a U-turn onto the other carriageway ~22 m north, and ~222 m back west.
+/// The end of the route passes within 30 m of the outbound leg.
+RouteOption uTurnRoute() => RouteOption(
+      'Terpantas',
+      2,
+      0.8,
+      'Laluan terpantas',
+      [
+        for (var i = 0; i <= 5; i++) LatLng(3.0, 101.0 + i * 0.001),
+        for (var i = 5; i >= 3; i--) LatLng(3.0002, 101.0 + i * 0.001),
+      ],
+      const [
+        Maneuver('Mulakan perjalanan di Jalan A', 1, 0.55, 0, street: 'Jalan A'),
+        Maneuver('Buat pusingan U', 12, 0.25, 5, street: 'Jalan A'),
+        Maneuver('Anda telah sampai', 4, 0, 8),
+      ],
+    );
 
 /// A NavState at [alongM] metres along [route], for tests that only need the model.
 /// The position and segment follow from [alongM] like they would on a real drive.
