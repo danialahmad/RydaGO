@@ -31,6 +31,10 @@ flutter run -d chrome               # app dengan muat semula panas
 cd backend
 docker run --rm -v "$PWD:/src" -w /src golang:1.26-alpine sh -c "gofmt -l . && go vet ./... && go test ./..."
 
+# Ujian pangkalan data sebenar (undi, tamat tempoh). Mulakan `docker compose up -d db`, kemudian dari PowerShell:
+docker run --rm --network waze-revamp_default -v "${PWD}:/src" -w /src -e TEST_DATABASE_URL="postgres://waze:wazedev@db:5432/postgres?sslmode=disable" golang:1.26-alpine go test ./...
+# Tanpa TEST_DATABASE_URL, ujian ini dilangkau.
+
 docker compose logs -f api          # log API
 docker compose logs -f valhalla nominatim
 docker compose ps                   # lihat "healthy"

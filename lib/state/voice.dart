@@ -2,12 +2,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/voice.dart';
 import 'navigation.dart';
+import 'reports.dart';
 import 'settings.dart';
 
 /// The speech engine. Tests override this with a fake.
 final speakerProvider = Provider<Speaker>((ref) => TtsSpeaker());
 
-/// Speaks navigation instructions while navigating (if voice is on in settings).
+/// Speaks while navigating (if voice is on in settings): turn instructions first,
+/// otherwise a heads-up about a report ahead, otherwise a speeding warning.
 /// Must be watched somewhere (the map screen does) to stay alive.
 class VoiceGuide extends Notifier<void> {
   final _planner = VoicePlanner();
@@ -20,8 +22,12 @@ class VoiceGuide extends Notifier<void> {
         ref.read(speakerProvider).stop();
         return;
       }
-      final text = _planner.next(next);
-      if (text != null && ref.read(settingsProvider).voiceOn) {
+      final settings = ref.read(settingsProvider);
+      // One sentence per update: speak() interrupts, so never queue two.
+      final text = _planner.next(next) ??
+          _planner.nextAlert(next, ref.read(reportsProvider)) ??
+          _planner.speeding(next, settings.speedAlert.toleranceKmh);
+      if (text != null && settings.voiceOn) {
         ref.read(speakerProvider).speak(text);
       }
     });

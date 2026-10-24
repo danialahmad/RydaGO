@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../models/geo.dart';
+import '../models/report.dart';
 import '../models/route.dart';
 import '../models/user_loc.dart';
 import '../services/api.dart';
@@ -16,6 +17,8 @@ const kHardOffRouteM = 120.0; // so far off that we re-route straight away
 const kArriveM = 30.0;
 const kMaxAccuracyM = 100.0; // ignore fixes less precise than this
 const kRerouteCooldown = Duration(seconds: 8);
+const kReportOnRouteM = 60.0; // a report this close to the route line counts as "on our road"
+const kLimitCarryM = 400.0; // keep showing the last known speed limit this far
 
 /// Where we are on the active route, derived from the latest GPS fix.
 class NavState {
@@ -76,6 +79,44 @@ class NavState {
     return cum[following.index] - cum[m.index] <= 500 ? following : null;
   }
 
+  /// The posted speed limit here, or null when OpenStreetMap does not know it.
+  /// The last known limit is carried forward for [kLimitCarryM] so the sign does
+  /// not flicker off on a short unmapped stretch of the same road.
+  int? get speedLimitKmh {
+    SpeedLimit? last;
+    for (final l in route.limits) {
+      if (l.from > seg) break;
+      last = l;
+    }
+    if (last == null) return null;
+    if (seg <= last.to) return last.kmh;
+    return cum[seg] - cum[last.to] <= kLimitCarryM ? last.kmh : null;
+  }
+
+  /// True when the speed is over the limit by more than [toleranceKmh].
+  bool isSpeeding(int toleranceKmh) {
+    final limit = speedLimitKmh, speed = speedKmh;
+    return limit != null && speed != null && speed > limit + toleranceKmh;
+  }
+
+  /// Reports that lie on the route within [withinM] ahead of us, nearest first.
+  /// With [passedM] > 0, reports we just drove past are included as well.
+  List<ReportAhead> reportsAhead(Iterable<Report> reports,
+      {double withinM = 800, double passedM = 0}) {
+    final out = <ReportAhead>[];
+    for (final r in reports) {
+      // Cheap straight-line rejection before projecting onto the route.
+      if (haversineM(pos, r.pos) > withinM + passedM + 100) continue;
+      final p = projectOnRoute(r.pos, route.points, cum, fromSeg: seg - 5, toSeg: seg + 200);
+      if (p.distM > kReportOnRouteM) continue;
+      final ahead = p.alongM - alongM;
+      if (ahead < -passedM || ahead > withinM) continue;
+      out.add(ReportAhead(r, ahead));
+    }
+    out.sort((a, b) => a.aheadM.compareTo(b.aheadM));
+    return out;
+  }
+
   NavState copyWith({
     double? alongM,
     LatLng? pos,
@@ -100,12 +141,12 @@ class NavState {
       );
 }
 
-class _Projection {
-  const _Projection(this.seg, this.alongM, this.distM, this.snapped);
-  final int seg;
-  final double alongM;
-  final double distM;
-  final LatLng snapped;
+/// A report lying on the road ahead, and how far along the route it is from us
+/// (negative = just passed).
+class ReportAhead {
+  const ReportAhead(this.report, this.aheadM);
+  final Report report;
+  final double aheadM;
 }
 
 /// Turns GPS fixes into navigation state: progress along the route, snapping,
@@ -198,40 +239,11 @@ class NavNotifier extends Notifier<NavState?> {
 
   /// Projects [p] onto the route polyline. Looks near the current segment first
   /// so routes that cross themselves do not make progress jump around.
-  _Projection _project(LatLng p, NavState s) {
+  RouteProjection _project(LatLng p, NavState s) {
     final pts = s.route.points;
-    final cum = s.cum;
-    const mLat = 110540.0;
-    final mLng = 111320.0 * math.cos(p.latitude * math.pi / 180);
-
-    _Projection scan(int from, int to) {
-      _Projection? best;
-      for (var i = from; i <= to; i++) {
-        final ax = (pts[i].longitude - p.longitude) * mLng;
-        final ay = (pts[i].latitude - p.latitude) * mLat;
-        final bx = (pts[i + 1].longitude - p.longitude) * mLng;
-        final by = (pts[i + 1].latitude - p.latitude) * mLat;
-        final dx = bx - ax, dy = by - ay;
-        final len2 = dx * dx + dy * dy;
-        final t = len2 == 0 ? 0.0 : (-(ax * dx + ay * dy) / len2).clamp(0.0, 1.0);
-        final cx = ax + t * dx, cy = ay + t * dy;
-        final d = math.sqrt(cx * cx + cy * cy);
-        if (best == null || d < best.distM) {
-          best = _Projection(
-            i,
-            cum[i] + t * (cum[i + 1] - cum[i]),
-            d,
-            LatLng(p.latitude + cy / mLat, p.longitude + cx / mLng),
-          );
-        }
-      }
-      return best!;
-    }
-
-    final last = pts.length - 2; // index of the last segment
-    final near = scan(math.max(0, s.seg - 3), math.min(last, s.seg + 60));
+    final near = projectOnRoute(p, pts, s.cum, fromSeg: s.seg - 3, toSeg: s.seg + 60);
     if (near.distM <= kOffRouteM) return near;
-    final all = scan(0, last);
+    final all = projectOnRoute(p, pts, s.cum);
     return all.distM < near.distM ? all : near;
   }
 }

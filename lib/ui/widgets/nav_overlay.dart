@@ -4,7 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/format.dart';
 import '../../app/theme.dart';
-import '../../models/geo.dart';
+import '../../models/report.dart';
+import '../../state/auth.dart';
 import '../../state/demo.dart';
 import '../../state/navigation.dart';
 import '../../state/reports.dart';
@@ -137,29 +138,59 @@ class NavBanner extends ConsumerWidget {
   }
 }
 
-/// Round speedometer in the corner while driving.
+/// Round speedometer in the corner while driving, with the posted speed limit
+/// above it when OpenStreetMap knows it. Turns red when over the limit by more
+/// than the tolerance chosen in settings.
 class SpeedBubble extends ConsumerWidget {
   const SpeedBubble({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final kmh = ref.watch(navProvider)?.speedKmh;
+    final nav = ref.watch(navProvider);
+    final tolerance = ref.watch(settingsProvider.select((s) => s.speedAlert.toleranceKmh));
+    final kmh = nav?.speedKmh;
+    final limit = nav?.speedLimitKmh;
+    final speeding = nav != null && tolerance != null && nav.isSpeeding(tolerance);
     final scheme = Theme.of(context).colorScheme;
-    return Material(
-      color: scheme.surface,
-      elevation: 6,
-      shape: const CircleBorder(),
-      child: SizedBox(
-        width: 72,
-        height: 72,
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Text(kmh == null ? '--' : '${kmh.round()}',
-              style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, height: 1)),
-          const Text('km/j',
-              style: TextStyle(fontSize: 11, color: AppColors.muted, fontWeight: FontWeight.w700)),
-        ]),
+    final fg = speeding ? Colors.white : scheme.onSurface;
+
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      if (limit != null) ...[
+        Container(
+          width: 54,
+          height: 54,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            shape: BoxShape.circle,
+            border: Border.all(color: AppColors.danger, width: 5),
+            boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 6)],
+          ),
+          child: Text('$limit',
+              style: const TextStyle(
+                  fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.ink, height: 1)),
+        ),
+        const SizedBox(height: 8),
+      ],
+      Material(
+        color: speeding ? AppColors.danger : scheme.surface,
+        elevation: 6,
+        shape: const CircleBorder(),
+        child: SizedBox(
+          width: 72,
+          height: 72,
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Text(kmh == null ? '--' : '${kmh.round()}',
+                style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, height: 1, color: fg)),
+            Text('km/j',
+                style: TextStyle(
+                    fontSize: 11,
+                    color: speeding ? Colors.white70 : AppColors.muted,
+                    fontWeight: FontWeight.w700)),
+          ]),
+        ),
       ),
-    );
+    ]);
   }
 }
 
@@ -178,7 +209,8 @@ class VoiceButton extends ConsumerWidget {
   }
 }
 
-/// A heads-up for the nearest report within 800 m of where the drive is now.
+/// A heads-up for the nearest report on the road ahead, within 800 m. Reports on
+/// other roads, or behind us, do not count (that is what the route is for).
 class NearbyReportPill extends ConsumerWidget {
   const NearbyReportPill({super.key});
 
@@ -186,20 +218,9 @@ class NearbyReportPill extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final nav = ref.watch(navProvider);
     if (nav == null || nav.arrived) return const SizedBox.shrink();
-    var best = 800.0;
-    String? title;
-    IconData? icon;
-    Color? color;
-    for (final r in ref.watch(reportsProvider)) {
-      final d = haversineM(nav.pos, r.pos);
-      if (d < best) {
-        best = d;
-        title = r.title;
-        icon = r.type.icon;
-        color = r.type.color;
-      }
-    }
-    if (title == null) return const SizedBox.shrink();
+    final ahead = nav.reportsAhead(ref.watch(reportsProvider));
+    if (ahead.isEmpty) return const SizedBox.shrink();
+    final r = ahead.first.report;
     return Material(
       color: Theme.of(context).colorScheme.surface,
       elevation: 6,
@@ -209,16 +230,90 @@ class NearbyReportPill extends ConsumerWidget {
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           CircleAvatar(
             radius: 18,
-            backgroundColor: color,
-            child: Icon(icon, color: Colors.white, size: 20),
+            backgroundColor: r.type.color,
+            child: Icon(r.type.icon, color: Colors.white, size: 20),
           ),
           const SizedBox(width: 10),
           Flexible(
-            child: Text('$title · ${formatDistance(best)}',
+            child: Text('${r.title} · ${formatDistance(ahead.first.aheadM)}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
           ),
+        ]),
+      ),
+    );
+  }
+}
+
+/// "Masih ada?": when passing a report made by someone else, asks whether it is
+/// still there. One tap confirms (keeps the report alive) or dismisses it (three
+/// net "gone" votes remove it for everyone).
+class ReportPrompt extends ConsumerWidget {
+  const ReportPrompt({super.key});
+
+  Future<void> _answer(BuildContext context, WidgetRef ref, Report r, bool stillThere) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final res = await ref.read(reportsProvider.notifier).vote(r, stillThere: stillThere);
+    final msg = switch (res) {
+      VoteResult.ok => 'Terima kasih! Jawapan anda membantu pemandu lain.',
+      VoteResult.ownReport => 'Ini laporan anda sendiri.',
+      VoteResult.unauthorized => 'Sesi tamat. Log masuk semula untuk menjawab.',
+      VoteResult.failed => 'Jawapan tak dapat dihantar. Cuba lagi.',
+    };
+    messenger.showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final nav = ref.watch(navProvider);
+    final signedIn = ref.watch(authProvider) != null;
+    final voted = ref.watch(votedReportsProvider);
+    if (nav == null || nav.arrived || !signedIn) return const SizedBox.shrink();
+
+    // Asked while approaching (within 250 m) and for a short while after passing.
+    final candidates = nav
+        .reportsAhead(ref.watch(reportsProvider), withinM: 250, passedM: 120)
+        .where((a) => !a.report.mine && a.report.id != 0 && !voted.contains(a.report.id))
+        .toList();
+    if (candidates.isEmpty) return const SizedBox.shrink();
+    final r = candidates.first.report;
+
+    return Material(
+      color: Theme.of(context).colorScheme.surface,
+      elevation: 6,
+      borderRadius: BorderRadius.circular(22),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('${r.spokenName} masih ada?',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(
+              child: FilledButton.tonalIcon(
+                style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(46),
+                    backgroundColor: AppColors.go.withValues(alpha: 0.18),
+                    foregroundColor: AppColors.go),
+                onPressed: () => _answer(context, ref, r, true),
+                icon: const Icon(Icons.thumb_up_alt_rounded, size: 20),
+                label: const Text('Ya', style: TextStyle(fontSize: 15)),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: FilledButton.tonalIcon(
+                style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(46),
+                    backgroundColor: AppColors.danger.withValues(alpha: 0.14),
+                    foregroundColor: AppColors.danger),
+                onPressed: () => _answer(context, ref, r, false),
+                icon: const Icon(Icons.thumb_down_alt_rounded, size: 20),
+                label: const Text('Tiada', style: TextStyle(fontSize: 15)),
+              ),
+            ),
+          ]),
         ]),
       ),
     );

@@ -13,14 +13,23 @@ class UnauthorizedException implements Exception {
   const UnauthorizedException();
 }
 
+/// Thrown when voting on a report the user made themselves (HTTP 403).
+class OwnReportException implements Exception {
+  const OwnReportException();
+}
+
 /// Everything the app asks the Go API for. See docs/API.md for the endpoints.
 class Api {
   const Api._();
 
   // ---- reports ----------------------------------------------------------------
-  static Future<List<Report>> nearbyReports(LatLng around) async {
-    final res = await http.get(Uri.parse(
-        '$kApiUrl/reports?lat=${around.latitude}&lng=${around.longitude}&radius=20000'));
+  /// With a [token] the answer marks the user's own reports (`mine`).
+  static Future<List<Report>> nearbyReports(LatLng around, {String? token}) async {
+    final res = await http.get(
+      Uri.parse(
+          '$kApiUrl/reports?lat=${around.latitude}&lng=${around.longitude}&radius=20000'),
+      headers: {'Authorization': ?(token == null ? null : 'Bearer $token')},
+    );
     if (res.statusCode != 200) throw Exception('GET /reports ${res.statusCode}');
     return [
       for (final j in jsonDecode(res.body) as List)
@@ -49,7 +58,27 @@ class Api {
     );
     if (res.statusCode == 401) throw const UnauthorizedException();
     if (res.statusCode != 201) throw Exception('POST /reports ${res.statusCode}');
-    return Report.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
+    final r = Report.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
+    return Report(r.type, r.lat, r.lng, id: r.id, subtype: r.subtype, mine: true);
+  }
+
+  /// "Masih ada?": [stillThere] true = it is still there, false = it is gone.
+  /// Returns the new (up, down) counts.
+  static Future<(int, int)> vote({
+    required String token,
+    required int reportId,
+    required bool stillThere,
+  }) async {
+    final res = await http.post(
+      Uri.parse('$kApiUrl/reports/$reportId/vote'),
+      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      body: jsonEncode({'vote': stillThere ? 'up' : 'down'}),
+    );
+    if (res.statusCode == 401) throw const UnauthorizedException();
+    if (res.statusCode == 403) throw const OwnReportException();
+    if (res.statusCode != 200) throw Exception('POST /reports/$reportId/vote ${res.statusCode}');
+    final j = jsonDecode(res.body) as Map<String, dynamic>;
+    return ((j['up'] as num).toInt(), (j['down'] as num).toInt());
   }
 
   // ---- routing ----------------------------------------------------------------

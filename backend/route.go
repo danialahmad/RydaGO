@@ -31,6 +31,15 @@ type maneuverOut struct {
 	Index  int     `json:"index"`            // index into Points where the step begins
 }
 
+// limitRange says the posted speed limit is Kmh for route points From..To.
+// Only stretches where OpenStreetMap knows the limit are listed (coverage in
+// Malaysia is partial), so gaps mean "unknown", not "no limit".
+type limitRange struct {
+	From int `json:"from"`
+	To   int `json:"to"`
+	Kmh  int `json:"kmh"`
+}
+
 type routeOut struct {
 	Label     string        `json:"label"`
 	Note      string        `json:"note"`
@@ -39,6 +48,7 @@ type routeOut struct {
 	Km        float64       `json:"km"`
 	Points    [][2]float64  `json:"points"` // [lat, lng]
 	Maneuvers []maneuverOut `json:"maneuvers"`
+	Limits    []limitRange  `json:"limits"`
 }
 
 // maneuverPhrases are Malay phrases for Valhalla's maneuver types
@@ -184,10 +194,14 @@ func askValhalla(ctx context.Context, fromLat, fromLng, toLat, toLng float64, au
 	}
 	var pts [][2]float64
 	maneuvers := []maneuverOut{}
+	limits := []limitRange{}
 	via, viaKm := "", 0.0
 	for _, leg := range v.Trip.Legs {
 		offset := len(pts) // maneuver indexes are relative to their own leg's shape
 		pts = append(pts, decodePolyline6(leg.Shape)...)
+		for _, l := range traceLimits(ctx, leg.Shape) {
+			limits = append(limits, limitRange{From: l.From + offset, To: l.To + offset, Kmh: l.Kmh})
+		}
 		for _, m := range leg.Maneuvers {
 			street := ""
 			if len(m.StreetNames) > 0 {
@@ -214,7 +228,67 @@ func askValhalla(ctx context.Context, fromLat, fromLng, toLat, toLng float64, au
 		Points:    pts,
 		Maneuvers: maneuvers,
 		Via:       via,
+		Limits:    limits,
 	}, nil
+}
+
+// traceLimits asks Valhalla which posted speed limit applies along a route's shape.
+// Failure is not an error for the route: the app just shows no limit.
+func traceLimits(ctx context.Context, shape string) []limitRange {
+	body, _ := json.Marshal(map[string]any{
+		"encoded_polyline": shape,
+		"costing":          "auto",
+		"shape_match":      "edge_walk", // the shape came from Valhalla, so it walks its own edges exactly
+		"filters": map[string]any{
+			"attributes": []string{"edge.speed_limit", "edge.begin_shape_index", "edge.end_shape_index"},
+			"action":     "include",
+		},
+	})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, valhallaURL+"/trace_attributes", bytes.NewReader(body))
+	if err != nil {
+		return nil
+	}
+	req.Header.Set("Content-Type", "application/json")
+	res, err := valhallaClient.Do(req)
+	if err != nil {
+		return nil
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return nil
+	}
+	var v struct {
+		Edges []struct {
+			SpeedLimit any `json:"speed_limit"` // a number, or absent when unknown
+			Begin      int `json:"begin_shape_index"`
+			End        int `json:"end_shape_index"`
+		} `json:"edges"`
+	}
+	if json.NewDecoder(res.Body).Decode(&v) != nil {
+		return nil
+	}
+	var out []limitRange
+	for _, e := range v.Edges {
+		if kmh, ok := e.SpeedLimit.(float64); ok && kmh > 0 && kmh < 200 {
+			out = append(out, limitRange{From: e.Begin, To: e.End, Kmh: int(kmh)})
+		}
+	}
+	return mergeLimits(out)
+}
+
+// mergeLimits joins neighbouring ranges that have the same limit.
+func mergeLimits(in []limitRange) []limitRange {
+	var out []limitRange
+	for _, r := range in {
+		if n := len(out); n > 0 && out[n-1].Kmh == r.Kmh && r.From <= out[n-1].To {
+			if r.To > out[n-1].To {
+				out[n-1].To = r.To
+			}
+			continue
+		}
+		out = append(out, r)
+	}
+	return out
 }
 
 // decodePolyline6 decodes Valhalla's encoded shape (polyline with 6 decimals).

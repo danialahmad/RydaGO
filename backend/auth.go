@@ -116,19 +116,33 @@ func (s *server) respondWithToken(w http.ResponseWriter, status int, id int64, e
 	writeJSON(w, status, map[string]any{"token": tok, "email": email})
 }
 
+// userFromRequest returns the user id in a valid Bearer token. present is false
+// when there is no Authorization header at all; ok is false when there is one
+// but it is not a valid, unexpired token.
+func (s *server) userFromRequest(r *http.Request) (uid int64, present, ok bool) {
+	raw, found := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if !found {
+		return 0, false, false
+	}
+	var claims jwt.RegisteredClaims
+	_, err := jwt.ParseWithClaims(raw, &claims,
+		func(*jwt.Token) (any, error) { return s.jwtSecret, nil },
+		jwt.WithValidMethods([]string{"HS256"}), jwt.WithExpirationRequired())
+	uid, perr := strconv.ParseInt(claims.Subject, 10, 64)
+	if err != nil || perr != nil {
+		return 0, true, false
+	}
+	return uid, true, true
+}
+
 func (s *server) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		raw, found := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if !found {
+		uid, present, ok := s.userFromRequest(r)
+		if !present {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "login diperlukan"})
 			return
 		}
-		var claims jwt.RegisteredClaims
-		_, err := jwt.ParseWithClaims(raw, &claims,
-			func(*jwt.Token) (any, error) { return s.jwtSecret, nil },
-			jwt.WithValidMethods([]string{"HS256"}), jwt.WithExpirationRequired())
-		uid, perr := strconv.ParseInt(claims.Subject, 10, 64)
-		if err != nil || perr != nil {
+		if !ok {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "token tidak sah atau tamat tempoh"})
 			return
 		}

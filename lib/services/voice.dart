@@ -1,5 +1,8 @@
+import 'dart:math' as math;
+
 import 'package:flutter_tts/flutter_tts.dart';
 
+import '../models/report.dart';
 import '../models/route.dart';
 import '../state/navigation.dart';
 
@@ -55,16 +58,54 @@ class VoicePlanner {
   static const farM = 500.0;
   static const nearM = 150.0;
 
+  /// How far ahead a report is announced.
+  static const alertM = 600.0;
+
   int? _maneuver; // index of the maneuver we are announcing
   int _stage = 0; // 0 = nothing said yet, 1 = far said, 2 = near said
   bool _arrivedSaid = false;
   bool _reroutingSaid = false;
+  final _alerted = <int>{}; // report ids already announced on this trip
+  bool _speedingSaid = false;
 
   void reset() {
     _maneuver = null;
     _stage = 0;
     _arrivedSaid = false;
     _reroutingSaid = false;
+    _alerted.clear();
+    _speedingSaid = false;
+  }
+
+  /// Announces a report on the road ahead, once per report: "Polis tersembunyi di
+  /// hadapan, 400 meter". Reports off the route (other side of the road) are skipped.
+  String? nextAlert(NavState s, List<Report> reports) {
+    if (s.arrived || s.rerouting) return null;
+    for (final a in s.reportsAhead(reports, withinM: alertM)) {
+      if (a.aheadM < 20) continue; // practically on top of it already
+      if (_alerted.add(a.report.id)) {
+        final rounded = math.max(50, (a.aheadM / 50).round() * 50);
+        return '${a.report.spokenName} di hadapan, $rounded meter';
+      }
+    }
+    return null;
+  }
+
+  /// Warns once when over the limit (by more than [toleranceKmh]), and again only
+  /// after the driver has been back at or under the limit. Null tolerance = off.
+  String? speeding(NavState s, int? toleranceKmh) {
+    if (toleranceKmh == null || s.arrived) {
+      _speedingSaid = false;
+      return null;
+    }
+    if (s.isSpeeding(toleranceKmh)) {
+      if (_speedingSaid) return null;
+      _speedingSaid = true;
+      return 'Anda melebihi had laju, ${s.speedLimitKmh} kilometer sejam';
+    }
+    final limit = s.speedLimitKmh, speed = s.speedKmh;
+    if (limit == null || speed == null || speed <= limit) _speedingSaid = false;
+    return null;
   }
 
   /// What to say for this state, or null for silence.

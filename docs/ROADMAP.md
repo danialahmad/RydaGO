@@ -11,13 +11,10 @@ Tanpa ini data komuniti tak boleh dipercayai atau tak selamat.
    - Had kadar pada `/auth/*` dan `POST /reports` (per IP dan per pengguna).
    - Ketatkan CORS kepada asal app. Tukar semua nilai dev (kata laluan, JWT) dalam deploy.
    - Siap bila: satu pengguna tak boleh hantar >N laporan seminit; ujian membuktikannya.
-2. **"Masih ada?" (sahkan/buang laporan)**
-   - Endpoint `POST /reports/{id}/vote` (`up`/`down`), jadual `report_votes`, jangka hayat laporan
-     dilanjutkan oleh undi naik dan dibuang oleh undi turun.
-   - UI: pil amaran berdekatan ada 👍 / 👎 semasa memandu.
-   - Siap bila: laporan dengan 3 undi turun hilang dari `GET /reports`.
-3. **Padam akaun dan data** (`DELETE /me`) + skrin dalam Tetapan. Diperlukan kedai app dan PDPA.
-4. **Ujian pangkalan data**: daftar, log masuk, simpan dan baca laporan, undi. Guna kontena `postgis` sementara.
+2. **Padam akaun dan data** (`DELETE /me`) + skrin dalam Tetapan. Diperlukan kedai app dan PDPA.
+3. **Padam laporan sendiri** dan undi dengan ketuk ikon di peta (undi kini hanya melalui kad "Masih ada?").
+
+(Siap: "Masih ada?" dengan undi dan jangka hayat; ujian pangkalan data sebenar dalam `integration_test.go`.)
 
 ## Peringkat 2: pengalaman memandu sebenar
 
@@ -25,10 +22,9 @@ Tanpa ini data komuniti tak boleh dipercayai atau tak selamat.
    Alamat API untuk emulator: `API_URL=http://10.0.2.2:8081`.
 6. **Skrin kekal hidup** (`wakelock_plus`) dan **navigasi di latar belakang** dengan notifikasi
    (perkhidmatan latar Android). Tanpa ini navigasi berhenti bila skrin mati.
-7. **Had laju dan amaran memandu laju**: ambil `maxspeed` (Valhalla `trace_attributes` pada laluan, atau
-   lapisan OSM), tanda had laju di bubble kelajuan, bubble jadi merah melebihi had.
-8. **Amaran suara untuk laporan di hadapan**: perluas `VoicePlanner` (sudah ada struktur "jauh/dekat").
-9. **HTTPS** untuk web supaya GPS berfungsi di telefon tanpa helah. Caddy dalam compose dengan sijil
+7. **Tambah baik had laju**: liputan OSM `maxspeed` di Malaysia rendah (~1/3). Pertimbang tekaan ikut kelas
+   jalan (dilabel "anggaran") atau sumbangan data ke OSM. Uji suara laporan/had laju pada telefon sebenar.
+8. **HTTPS** untuk web supaya GPS berfungsi di telefon tanpa helah. Caddy dalam compose dengan sijil
    dalaman atau domain sebenar.
 
 ## Peringkat 3: kandungan

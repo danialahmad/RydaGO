@@ -65,7 +65,17 @@ type report struct {
 	Lat       float64   `json:"lat"`
 	Lng       float64   `json:"lng"`
 	CreatedAt time.Time `json:"created_at"`
+	Up        int       `json:"up"`             // "still there" votes
+	Down      int       `json:"down"`           // "gone" votes
+	Mine      bool      `json:"mine,omitempty"` // only set when the caller sent a valid token
 }
+
+// How long a report stays on the map after it was made or last confirmed, and how
+// many more "gone" than "still there" votes remove it early.
+const (
+	reportLifetime = "2 hours" // a Postgres interval literal
+	hideNetDown    = 3
+)
 
 func main() {
 	dsn := os.Getenv("DATABASE_URL")
@@ -94,6 +104,13 @@ func main() {
 	defer pool.Close()
 
 	s := &server{db: pool, jwtSecret: []byte(secret), dummyHash: dummy}
+	log.Printf("listening on :%s", port)
+	log.Fatal(http.ListenAndServe(":"+port, s.routes()))
+}
+
+// routes wires every endpoint. Kept separate from main so tests can serve the
+// real router (see integration_test.go).
+func (s *server) routes() http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID, middleware.Logger, middleware.Recoverer, cors)
 	r.Get("/health", s.health)
@@ -101,11 +118,10 @@ func main() {
 	r.Post("/auth/login", s.login)
 	r.With(s.requireAuth).Post("/reports", s.createReport)
 	r.Get("/reports", s.nearbyReports)
+	r.With(s.requireAuth).Post("/reports/{id}/vote", s.voteReport)
 	r.Get("/route", s.route)
 	r.Get("/places", s.places)
-
-	log.Printf("listening on :%s", port)
-	log.Fatal(http.ListenAndServe(":"+port, r))
+	return r
 }
 
 // cors allows the Flutter web build (served from another origin) to call the API.
@@ -196,13 +212,26 @@ func (s *server) nearbyReports(w http.ResponseWriter, r *http.Request) {
 		radius = v
 	}
 
+	// The caller may be anonymous; a valid token only adds "mine" to the answer.
+	viewer, _, _ := s.userFromRequest(r)
+
+	// A report is shown while it is younger than reportLifetime counted from its
+	// creation or its latest "still there" vote, and until "gone" votes outnumber
+	// "still there" votes by hideNetDown.
 	rows, err := s.db.Query(r.Context(),
-		`SELECT id, type, COALESCE(subtype, ''), ST_Y(geom::geometry), ST_X(geom::geometry), created_at
-		 FROM reports
-		 WHERE ST_DWithin(geom, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, $3)
-		   AND created_at > now() - interval '2 hours'
-		 ORDER BY created_at DESC
-		 LIMIT 100`, lng, lat, radius)
+		`SELECT r.id, r.type, COALESCE(r.subtype, ''), ST_Y(r.geom::geometry), ST_X(r.geom::geometry),
+		        r.created_at, v.up, v.down, COALESCE(r.user_id = $4, false)
+		 FROM reports r
+		 CROSS JOIN LATERAL (
+		     SELECT count(*) FILTER (WHERE vote = 1)::int  AS up,
+		            count(*) FILTER (WHERE vote = -1)::int AS down,
+		            max(created_at) FILTER (WHERE vote = 1) AS last_up
+		     FROM report_votes WHERE report_id = r.id) v
+		 WHERE ST_DWithin(r.geom, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, $3)
+		   AND GREATEST(r.created_at, COALESCE(v.last_up, r.created_at)) > now() - interval '`+reportLifetime+`'
+		   AND v.down - v.up < `+strconv.Itoa(hideNetDown)+`
+		 ORDER BY r.created_at DESC
+		 LIMIT 100`, lng, lat, radius, viewer)
 	if err != nil {
 		log.Printf("query reports: %v", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
@@ -213,7 +242,8 @@ func (s *server) nearbyReports(w http.ResponseWriter, r *http.Request) {
 	out := []report{}
 	for rows.Next() {
 		var rep report
-		if err := rows.Scan(&rep.ID, &rep.Type, &rep.Subtype, &rep.Lat, &rep.Lng, &rep.CreatedAt); err != nil {
+		if err := rows.Scan(&rep.ID, &rep.Type, &rep.Subtype, &rep.Lat, &rep.Lng, &rep.CreatedAt,
+			&rep.Up, &rep.Down, &rep.Mine); err != nil {
 			log.Printf("scan report: %v", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 			return

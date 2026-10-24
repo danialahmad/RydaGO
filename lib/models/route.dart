@@ -19,6 +19,19 @@ class Maneuver {
       );
 }
 
+/// The posted speed limit along route points [from]..[to]. Only stretches where
+/// OpenStreetMap knows the limit are listed, so a gap means "unknown".
+class SpeedLimit {
+  const SpeedLimit(this.from, this.to, this.kmh);
+
+  final int from;
+  final int to;
+  final int kmh;
+
+  static SpeedLimit fromJson(Map<String, dynamic> j) =>
+      SpeedLimit(j['from'] as int, j['to'] as int, j['kmh'] as int);
+}
+
 /// One way to get to the destination, as returned by `GET /route`.
 class RouteOption {
   const RouteOption(
@@ -29,6 +42,7 @@ class RouteOption {
     this.points,
     this.maneuvers, {
     this.via = '',
+    this.limits = const [],
   });
 
   final String label; // "Terpantas", "Tanpa tol", "Jarak terpendek"
@@ -38,6 +52,7 @@ class RouteOption {
   final String via; // street the route follows for longest ('' if unknown)
   final List<LatLng> points;
   final List<Maneuver> maneuvers;
+  final List<SpeedLimit> limits; // sorted by [SpeedLimit.from]
 
   static RouteOption fromJson(Map<String, dynamic> j) => RouteOption(
         j['label'] as String,
@@ -53,5 +68,9 @@ class RouteOption {
             Maneuver.fromJson(m as Map<String, dynamic>),
         ],
         via: (j['via'] as String?) ?? '',
+        limits: [
+          for (final l in (j['limits'] as List? ?? const []))
+            SpeedLimit.fromJson(l as Map<String, dynamic>),
+        ],
       );
 }

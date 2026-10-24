@@ -62,7 +62,13 @@ class MapScreen extends ConsumerWidget {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
                     child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      const Expanded(child: Align(alignment: Alignment.centerLeft, child: NearbyReportPill())),
+                      const Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          NearbyReportPill(),
+                          SizedBox(height: 8),
+                          ReportPrompt(),
+                        ]),
+                      ),
                       const SizedBox(width: 8),
                       const VoiceButton(),
                     ]),

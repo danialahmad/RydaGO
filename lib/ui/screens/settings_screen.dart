@@ -119,6 +119,25 @@ class SettingsScreen extends ConsumerWidget {
             value: settings.avoidTolls,
             onChanged: notifier.setAvoidTolls,
           ),
+          const ListTile(
+            leading: Icon(Icons.speed_rounded),
+            title: Text('Amaran memandu laju'),
+            subtitle: Text(
+                'Meter jadi merah dan suara memberi amaran bila melebihi had laju. '
+                'Had hanya diketahui pada sesetengah jalan.'),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+            child: SegmentedButton<SpeedAlert>(
+              showSelectedIcon: false,
+              segments: [
+                for (final a in SpeedAlert.values)
+                  ButtonSegment(value: a, label: Text(a.label, style: const TextStyle(fontSize: 12.5))),
+              ],
+              selected: {settings.speedAlert},
+              onSelectionChanged: (s) => notifier.setSpeedAlert(s.first),
+            ),
+          ),
 
           // ---- display ----
           const _Section('PAPARAN'),

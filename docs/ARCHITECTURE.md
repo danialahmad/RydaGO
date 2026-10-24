@@ -53,9 +53,12 @@ Skema pangkalan data (hasil `migrations/`):
 users   (id, email UNIQUE, password_hash, created_at)
 reports (id, type, subtype NULL, geom GEOGRAPHY(Point,4326), user_id -> users, created_at)
          indeks GIST pada geom, indeks pada created_at
+report_votes (report_id, user_id, vote +1/-1, PRIMARY KEY (report_id, user_id))
 ```
 
-Laporan dibaca dengan `ST_DWithin` dan tapis 2 jam terakhir (`created_at > now() - interval '2 hours'`).
+Laporan dibaca dengan `ST_DWithin`. Ia sah selagi umur (sejak dibuat atau undi naik terkini) < 2 jam, dan
+disembunyikan bila `undi turun - undi naik >= 3`. Jumlah undi dikira dengan `CROSS JOIN LATERAL` dalam `nearbyReports`.
+Had laju datang dari `traceLimits` dalam `route.go` (Valhalla `/trace_attributes`, `edge_walk`).
 Tiada kerja pembersihan: baris lama kekal dalam jadual, cuma tak dipulangkan.
 
 Keputusan penting:

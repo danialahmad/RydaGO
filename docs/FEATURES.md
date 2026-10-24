@@ -62,8 +62,8 @@ Lajur "Perlu" menyebut apa yang perlu disediakan (backend, data, atau platform).
 | Arahan suara bahasa Melayu | 🟡 | | `flutter_tts`. Bergantung suara yang ada pada peranti/pelayar. Belum diuji pada telefon sebenar |
 | Bar bawah: waktu tiba, baki masa dan jarak, "Melalui", kemajuan | ✅ | | Ketuk untuk kembangkan |
 | Speedometer | ✅ | | Dari GPS |
-| Tanda had laju | ⬜ | 1 | Perlu data `maxspeed` (Valhalla `trace_attributes` atau OSM) |
-| Amaran memandu laju | ⬜ | 1 | Selepas had laju |
+| Tanda had laju | 🟡 | | Dari OSM `maxspeed` melalui Valhalla. Hanya ~1/3 jalan ada data; tanda hilang bila tak diketahui |
+| Amaran memandu laju | 🟡 | | Meter jadi merah + amaran suara sekali. Tetapan: Mati / Tepat had / +5 / +10. Hanya di mana had diketahui |
 | Kira semula laluan bila tersasar | ✅ | | `navigation.dart`: >120 m serta-merta, atau 3 fix >50 m; jeda 8 saat |
 | Senyap / hidupkan suara | ✅ | | |
 | Kongsi ETA | 🟡 | 2 | Hanya salin teks. Waze beri pautan jejak langsung |
@@ -82,9 +82,9 @@ Waze ialah app komuniti; inilah ciri yang membezakannya.
 | Subjenis (polis tersembunyi, trafik terhenti, lubang...) | ✅ | | Jadual penuh dalam `docs/API.md` |
 | Laporan dipaparkan di peta dengan ikon | ✅ | | Muat semula setiap 15 saat |
 | Amaran laporan berdekatan semasa memandu (visual) | ✅ | | Dalam 800 m |
-| Amaran **suara** untuk laporan di hadapan | ⬜ | 1 | Guna `VoicePlanner` yang sedia ada |
-| "Masih ada?" (👍 / 👎) untuk sahkan atau buang laporan | ⬜ | 1 | Endpoint undi + jangka hayat laporan ikut undi. Ini nadi ketepatan data |
-| Laporan tamat sendiri | 🟡 | | Tetap 2 jam untuk semua jenis. Waze beza ikut jenis |
+| Amaran **suara** untuk laporan di hadapan | 🟡 | | Sekali setiap laporan, dalam 600 m, hanya di jalan laluan. Belum didengar pada telefon sebenar |
+| "Masih ada?" (Ya / Tiada) untuk sahkan atau buang laporan | ✅ | | Kad muncul selepas melepasi laporan. 3 undi turun bersih menyembunyikan; undi naik melanjutkan hayat. Belum boleh undi dengan ketuk ikon di peta |
+| Laporan tamat sendiri | 🟡 | | 2 jam untuk semua jenis (dilanjutkan undi naik). Waze beza ikut jenis |
 | Cegah penyalahgunaan (spam, laporan palsu) | ⬜ | 1 | Had kadar per pengguna, undi, reputasi. **Wajib sebelum dibuka kepada orang ramai** |
 | Laporan kemalangan dengan gambar, "chat peta", laporan isu peta | ⬜ | 3 | |
 | Mata dan pangkat (gamifikasi) | ⬜ | 3 | |

@@ -61,11 +61,25 @@ enum ReportType {
 
 /// A report from another driver (or yourself) shown on the map.
 class Report {
-  Report(this.type, this.lat, this.lng, {this.subtype});
+  Report(
+    this.type,
+    this.lat,
+    this.lng, {
+    this.id = 0,
+    this.subtype,
+    this.up = 0,
+    this.down = 0,
+    this.mine = false,
+  });
+
+  final int id;
   final ReportType type;
   final String? subtype;
   final double lat;
   final double lng;
+  final int up; // "still there" votes
+  final int down; // "gone" votes
+  final bool mine; // made by the signed-in user (they cannot vote on it)
 
   LatLng get pos => LatLng(lat, lng);
 
@@ -75,10 +89,34 @@ class Report {
     return sub == null ? type.label : '${type.label} · $sub';
   }
 
+  /// How the voice says it: "Polis tersembunyi", "Kamera kelajuan", "Bahaya lubang".
+  String get spokenName {
+    final sub = type.subtypeLabel(subtype);
+    if (sub == null) return type.label;
+    // "Kamera kelajuan" already starts with the type: do not say "Kamera kamera kelajuan".
+    if (sub.toLowerCase().startsWith(type.label.toLowerCase())) return sub;
+    return '${type.label} ${sub.toLowerCase()}';
+  }
+
+  Report copyWith({int? up, int? down}) => Report(
+        type,
+        lat,
+        lng,
+        id: id,
+        subtype: subtype,
+        up: up ?? this.up,
+        down: down ?? this.down,
+        mine: mine,
+      );
+
   static Report fromJson(Map<String, dynamic> j) => Report(
         ReportType.values.byName(j['type'] as String),
         (j['lat'] as num).toDouble(),
         (j['lng'] as num).toDouble(),
+        id: (j['id'] as num?)?.toInt() ?? 0,
         subtype: j['subtype'] as String?,
+        up: (j['up'] as num?)?.toInt() ?? 0,
+        down: (j['down'] as num?)?.toInt() ?? 0,
+        mine: (j['mine'] as bool?) ?? false,
       );
 }

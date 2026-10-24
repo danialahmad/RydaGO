@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"math"
@@ -115,6 +116,14 @@ func fakeValhalla(t *testing.T, failWhen func(opts map[string]any) bool) (*httpt
 	var seen []map[string]any
 	shape := encodePolyline6([][2]float64{{3.1579, 101.7116}, {3.1600, 101.7200}, {3.1602, 101.7274}})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/trace_attributes" {
+			// Posted limit 60 on both edges of the 3-point route.
+			json.NewEncoder(w).Encode(map[string]any{"edges": []map[string]any{
+				{"speed_limit": 60, "begin_shape_index": 0, "end_shape_index": 1},
+				{"speed_limit": 60, "begin_shape_index": 1, "end_shape_index": 2},
+			}})
+			return
+		}
 		body, _ := io.ReadAll(r.Body)
 		var req struct {
 			Costing        string                    `json:"costing"`
@@ -198,6 +207,9 @@ func TestRouteReturnsThreeVariants(t *testing.T) {
 	if r.Via != "Jalan B" { // the longest step (6 km) is on Jalan B
 		t.Errorf("via = %q, want Jalan B", r.Via)
 	}
+	if len(r.Limits) != 1 || r.Limits[0] != (limitRange{From: 0, To: 2, Kmh: 60}) {
+		t.Errorf("limits = %+v, want one merged 0..2 range at 60 km/h", r.Limits)
+	}
 	for i, m := range r.Maneuvers {
 		if m.Text != wantText[i] || m.Index != i {
 			t.Errorf("maneuver %d: got %q idx %d", i, m.Text, m.Index)
@@ -230,6 +242,57 @@ func TestRouteKeepsWorkingVariantsWhenOneFails(t *testing.T) {
 	json.Unmarshal(rec.Body.Bytes(), &routes)
 	if rec.Code != http.StatusOK || len(routes) != 2 {
 		t.Fatalf("status %d, %d routes: %s", rec.Code, len(routes), rec.Body)
+	}
+}
+
+func TestMergeLimits(t *testing.T) {
+	got := mergeLimits([]limitRange{
+		{0, 5, 60}, {5, 9, 60}, // touching and equal: merged
+		{9, 12, 80},  // different limit: kept apart
+		{20, 25, 80}, // same limit but a gap (unknown stretch): kept apart
+	})
+	want := []limitRange{{0, 9, 60}, {9, 12, 80}, {20, 25, 80}}
+	if len(got) != len(want) {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("range %d: got %+v, want %+v", i, got[i], want[i])
+		}
+	}
+	if mergeLimits(nil) != nil {
+		t.Error("no input should give no ranges")
+	}
+}
+
+func TestTraceLimitsSkipsUnknownAndOddValues(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"edges":[
+		  {"speed_limit": 50, "begin_shape_index": 0, "end_shape_index": 3},
+		  {"begin_shape_index": 3, "end_shape_index": 6},
+		  {"speed_limit": "unlimited", "begin_shape_index": 6, "end_shape_index": 8},
+		  {"speed_limit": 0, "begin_shape_index": 8, "end_shape_index": 9},
+		  {"speed_limit": 999, "begin_shape_index": 9, "end_shape_index": 10},
+		  {"speed_limit": 90, "begin_shape_index": 10, "end_shape_index": 14}]}`))
+	}))
+	defer srv.Close()
+	useValhalla(t, srv.URL)
+
+	got := traceLimits(context.Background(), "irrelevant")
+	want := []limitRange{{0, 3, 50}, {10, 14, 90}}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("got %+v, want %+v", got, want)
+	}
+}
+
+func TestTraceLimitsFailureIsNotFatal(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "no match", http.StatusBadRequest)
+	}))
+	defer srv.Close()
+	useValhalla(t, srv.URL)
+	if got := traceLimits(context.Background(), "x"); got != nil {
+		t.Errorf("got %+v, want nil", got)
 	}
 }
 

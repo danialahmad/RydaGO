@@ -12,8 +12,9 @@ Sumber kod: `backend/main.go`, `auth.go`, `route.go`, `places.go`. Ujian: `backe
 | GET | `/health` | tidak | Semak API dan pangkalan data |
 | POST | `/auth/register` | tidak | Daftar akaun, terus dapat token |
 | POST | `/auth/login` | tidak | Log masuk |
-| GET | `/reports` | tidak | Laporan berdekatan (2 jam terakhir) |
+| GET | `/reports` | tidak (token pilihan) | Laporan berdekatan yang masih sah |
 | POST | `/reports` | **ya** | Hantar laporan |
+| POST | `/reports/{id}/vote` | **ya** | "Masih ada?": undi naik atau turun |
 | GET | `/route` | tidak | Tiga pilihan laluan dengan arahan belokan |
 | GET | `/places` | tidak | Carian alamat atau tempat |
 
@@ -35,16 +36,25 @@ Badan: `{"email": "a@b.my", "password": "kata-laluan-8-aksara"}`
 ## `GET /reports?lat=&lng=&radius=`
 
 - `lat`, `lng`: wajib. `radius`: meter, lalai 5000, maksimum 50000.
-- Hanya laporan **2 jam terakhir**, terbaru dahulu, **maksimum 100**.
+- Laporan kekal sah **2 jam** dari dibuat, atau dari undi naik terkini (undi naik melanjutkan hayatnya).
+- Disembunyikan bila undi turun melebihi undi naik sekurang-kurangnya **3** (`down - up >= 3`).
+- Terbaru dahulu, **maksimum 100**.
+- Jika `Authorization: Bearer` yang sah dihantar, `mine` menunjukkan laporan milik pengguna itu. Token tak sah diabaikan (bukan 401).
 
 ```json
 [
   {"id": 16, "type": "jam", "subtype": "standstill", "lat": 3.2359, "lng": 101.6989,
-   "created_at": "2026-10-24T02:25:11Z"}
+   "created_at": "2026-10-24T02:25:11Z", "up": 2, "down": 0, "mine": false}
 ]
 ```
 
 `subtype` tiada dalam respons jika pelapor tak memberi butiran. `400` jika `lat`/`lng` tiada.
+
+## `POST /reports/{id}/vote` (log masuk)
+
+Badan: `{"vote": "up"}` (masih ada) atau `{"vote": "down"}` (sudah tiada). Satu undi bagi setiap pengguna
+bagi setiap laporan; mengundi semula menukar undi sedia ada. `200 {"up": 3, "down": 1}` (jumlah terkini).
+`400` id atau nilai undi tak sah, `401` tiada token, `403` laporan sendiri, `404` laporan tak wujud.
 
 ## `POST /reports` (log masuk)
 
@@ -86,11 +96,15 @@ Minta Valhalla tiga kali selari. Pulangkan hanya yang berjaya.
       {"text": "Mulakan perjalanan di Lorong Kuda", "street": "Lorong Kuda",
        "type": 1, "km": 0.39, "index": 0},
       {"text": "Anda telah sampai", "type": 4, "km": 0, "index": 164}
-    ]
+    ],
+    "limits": [{"from": 0, "to": 40, "kmh": 60}]   // had laju; hanya di mana OSM tahu
   }
 ]
 ```
 
+- `limits[]`: had laju dalam km/j untuk segmen `points[from]` hingga `points[to]`. Dianggar daripada Valhalla
+  `trace_attributes`. Hanya kira-kira sepertiga jalan di Malaysia ada `maxspeed` dalam OSM, jadi senarai
+  mungkin pendek atau kosong. App membawa had terakhir ke hadapan 400 m, selepas itu menyembunyikan tanda.
 - `maneuvers[].index` ialah indeks dalam `points` di mana langkah bermula.
 - `type` ialah [jenis belokan Valhalla](https://valhalla.github.io/valhalla/api/turn-by-turn/api-reference/):
   1-3 mula, 4-6 tiba, 9-16 belok, 17-24 ramp/jalan keluar/lorong, 25 bergabung, 26-27 bulatan.
