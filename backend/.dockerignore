@@ -1,0 +1,4 @@
+# The 1.6 GB routing data must never be sent to the Docker build context.
+valhalla/
+*_test.go
+.env

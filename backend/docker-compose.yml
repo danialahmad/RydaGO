@@ -1,0 +1,72 @@
+services:
+  db:
+    image: postgis/postgis:16-3.5
+    environment:
+      POSTGRES_USER: waze
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wazedev}
+      POSTGRES_DB: waze
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U waze -d waze"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # Routing engine. First start downloads the OSM extract and builds tiles
+  # (several minutes); later starts reuse ./valhalla/valhalla_tiles.tar.
+  valhalla:
+    image: ghcr.io/gis-ops/docker-valhalla/valhalla:latest
+    environment:
+      tile_urls: https://download.geofabrik.de/asia/malaysia-singapore-brunei-latest.osm.pbf
+      use_tiles_ignore_pbf: "True"
+      build_elevation: "False"
+      build_admins: "True"
+      build_time_zones: "True"
+      server_threads: "4"
+    ports:
+      - "127.0.0.1:8002:8002"
+    volumes:
+      - ./valhalla:/custom_files
+    restart: unless-stopped
+
+  # Geocoder (address search). First start imports the same OSM extract Valhalla
+  # uses; this takes a long time and several GB of disk. Check progress with
+  # `docker compose logs -f nominatim`.
+  nominatim:
+    image: mediagis/nominatim:5.1
+    shm_size: 1gb
+    environment:
+      PBF_PATH: /data/malaysia.osm.pbf
+      IMPORT_STYLE: address
+      THREADS: "4"
+      FREEZE: "true"
+      NOMINATIM_PASSWORD: ${NOMINATIM_PASSWORD:-nominatim-dev-only}
+    ports:
+      - "127.0.0.1:8088:8080"
+    volumes:
+      - ./valhalla/malaysia-singapore-brunei-latest.osm.pbf:/data/malaysia.osm.pbf:ro
+      - nominatim-data:/var/lib/postgresql/16/main
+    restart: unless-stopped
+
+  api:
+    build: .
+    restart: on-failure
+    environment:
+      DATABASE_URL: postgres://waze:${POSTGRES_PASSWORD:-wazedev}@db:5432/waze?sslmode=disable
+      PORT: "8081"
+      VALHALLA_URL: http://valhalla:8002
+      NOMINATIM_URL: http://nominatim:8080
+      # Dev default only. Set JWT_SECRET in the environment for anything real.
+      JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me-0123456789abcdef}
+    ports:
+      - "127.0.0.1:8081:8081"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  nominatim-data:
