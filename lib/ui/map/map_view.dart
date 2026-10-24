@@ -1,4 +1,4 @@
-import 'dart:math' as math;
+import 'dart:async';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -8,7 +8,6 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import '../../app/config.dart';
 import '../../app/theme.dart';
 import '../../models/geo.dart';
-import '../../models/place.dart';
 import '../../models/report.dart';
 import '../../models/route.dart';
 import '../../models/user_loc.dart';
@@ -48,6 +47,17 @@ class _MapViewState extends ConsumerState<MapView> {
   double _bearing = 0;
   String? _initialStyle;
   bool? _appliedDark;
+  Size _viewSize = Size.zero;
+  Timer? _fitTimer;
+
+  /// Kept clear at the top when framing a route: the menu button and GPS chip.
+  static const _kTopClearPx = 76.0;
+
+  @override
+  void dispose() {
+    _fitTimer?.cancel();
+    super.dispose();
+  }
 
   /// The drive state owns the dot while navigating; otherwise the GPS does.
   LatLng get _userPos => ref.read(navProvider)?.pos ?? ref.read(userLocProvider).pos;
@@ -267,34 +277,41 @@ class _MapViewState extends ConsumerState<MapView> {
     } catch (_) {}
   }
 
-  /// Frames the user and the destination in the part of the screen the route
-  /// sheet leaves free. newLatLngBounds pads differently on web (it scales by the
-  /// device pixel ratio), so centre and zoom are computed here.
-  Future<void> _fitDestination(Place? dest) async {
+  /// Frames the trip after the route sheet has settled: it animates in, then
+  /// grows when the routes arrive, and each change restarts the wait.
+  void _scheduleFit() {
+    _fitTimer?.cancel();
+    _fitTimer = Timer(const Duration(milliseconds: 300), _fitTrip);
+  }
+
+  /// Shows the routes on offer (or just the user and the destination while they
+  /// load) in the middle of the map the panels leave visible. Computed here:
+  /// newLatLngBounds pads differently on web (it scales by the device pixel ratio).
+  Future<void> _fitTrip() async {
     final c = _controller;
-    if (c == null) return;
+    if (c == null || ref.read(navigatingProvider)) return;
+    final dest = ref.read(destinationProvider);
+    final CameraPosition camera;
     if (dest == null) {
-      await c.animateCamera(CameraUpdate.newCameraPosition(
-          CameraPosition(target: _userPos, zoom: 14, bearing: 0, tilt: 0)));
-      return;
+      camera = CameraPosition(target: _userPos, zoom: 14, bearing: 0, tilt: 0);
+    } else {
+      if (_viewSize.isEmpty) return;
+      final routesAsync = ref.read(routesProvider);
+      final routes = routesAsync.isLoading
+          ? const <RouteOption>[]
+          : (routesAsync.value ?? const <RouteOption>[]);
+      final fit = fitCamera(
+        [_userPos, dest.pos, for (final r in routes) ...r.points],
+        _viewSize.width,
+        _viewSize.height,
+        top: _kTopClearPx,
+        bottom: ref.read(mapBottomInsetProvider) + 24,
+        side: 40,
+      );
+      camera = CameraPosition(target: fit.center, zoom: fit.zoom, bearing: 0, tilt: 0);
     }
-    double rad(double d) => d * math.pi / 180;
-    final a = _userPos, b = dest.pos;
-    final midLat = (a.latitude + b.latitude) / 2;
-    final midLng = (a.longitude + b.longitude) / 2;
-    final worldKm = 40075.0 * math.cos(rad(midLat));
-    final dLatKm = (a.latitude - b.latitude).abs() * 111.0;
-    final dLngKm = (a.longitude - b.longitude).abs() * 111.0 * math.cos(rad(midLat));
-    final spanKm = math.max(math.max(dLatKm, dLngKm), 0.5);
-    const fitPx = 260.0;
-    final zoom =
-        (math.log(worldKm * fitPx / (512 * spanKm)) / math.ln2).clamp(3.0, 16.0);
-    final kmPerPx = worldKm / (512 * math.pow(2, zoom));
-    const sheetShiftPx = 170.0; // lift the route above the bottom sheet
-    final centerLat = midLat - sheetShiftPx * kmPerPx / 111.0;
     try {
-      await c.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(
-          target: LatLng(centerLat, midLng), zoom: zoom, bearing: 0, tilt: 0)));
+      await c.animateCamera(CameraUpdate.newCameraPosition(camera));
     } catch (_) {
       // Camera moves are cosmetic; ignore failures.
     }
@@ -310,7 +327,15 @@ class _MapViewState extends ConsumerState<MapView> {
     });
     ref.listen(pinProvider, (_, _) => _sync());
     ref.listen(routeIndexProvider, (_, _) => _sync());
-    ref.listen(routesProvider, (_, _) => _sync());
+    ref.listen(routesProvider, (_, next) {
+      _sync();
+      if (!next.isLoading) _scheduleFit();
+    });
+    ref.listen(mapBottomInsetProvider, (_, _) {
+      if (ref.read(destinationProvider) != null && !ref.read(navigatingProvider)) {
+        _scheduleFit();
+      }
+    });
     ref.listen(navProvider, (prev, next) {
       if (next == null) return;
       // A re-route swaps the route object: redraw the blue line.
@@ -321,7 +346,12 @@ class _MapViewState extends ConsumerState<MapView> {
     ref.listen(recenterProvider, (_, _) => _recenter());
     ref.listen(destinationProvider, (_, next) {
       _sync();
-      _fitDestination(next);
+      if (next == null) {
+        _fitTimer?.cancel();
+        _fitTrip();
+      } else {
+        _scheduleFit();
+      }
     });
     ref.listen(navigatingProvider, (_, nav) {
       _sync();
@@ -330,7 +360,7 @@ class _MapViewState extends ConsumerState<MapView> {
             target: _userPos, zoom: 17, bearing: _bearing, tilt: 45)));
       } else {
         _bearing = 0;
-        _fitDestination(ref.read(destinationProvider));
+        _scheduleFit();
       }
     });
 
@@ -346,6 +376,13 @@ class _MapViewState extends ConsumerState<MapView> {
       });
     }
     _appliedDark = dark;
+    return LayoutBuilder(builder: (context, constraints) {
+      _viewSize = constraints.biggest; // for framing routes; no rebuild needed
+      return _map();
+    });
+  }
+
+  Widget _map() {
     return MapLibreMap(
       styleString: _initialStyle!,
       initialCameraPosition: const CameraPosition(target: kCenter, zoom: 13),

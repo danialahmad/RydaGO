@@ -59,6 +59,18 @@ final navigatingProvider = NotifierProvider<NavigatingNotifier, bool>(
   NavigatingNotifier.new,
 );
 
+/// Height in pixels of the panel over the bottom of the map, so the camera can
+/// frame a route in the part of the map still visible. Set by the map screen.
+class MapBottomInsetNotifier extends Notifier<double> {
+  @override
+  double build() => 0;
+
+  void set(double v) => state = v;
+}
+
+final mapBottomInsetProvider =
+    NotifierProvider<MapBottomInsetNotifier, double>(MapBottomInsetNotifier.new);
+
 /// A pin dropped with a long press. Also where the next report goes, if set.
 class PinNotifier extends Notifier<LatLng?> {
   @override

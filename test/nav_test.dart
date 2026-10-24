@@ -1,4 +1,6 @@
-import 'package:flutter/material.dart' show Icons;
+import 'dart:math' as math;
+
+import 'package:flutter/material.dart' show Icons, Offset, Size;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
@@ -26,6 +28,45 @@ void main() {
       expect(east.first.latitude, closeTo(at.latitude, 1e-9));
       final north = arrowPolygon(at, 0, lengthM: 10);
       expect(north.first.latitude, greaterThan(at.latitude)); // tip north
+    });
+
+    group('fitCamera', () {
+      // Where a point lands on screen for a camera, with the same projection.
+      Offset onScreen(LatLng p, LatLng center, double zoom, Size view) {
+        double wx(LatLng q) => (q.longitude + 180) / 360;
+        double wy(LatLng q) {
+          final s = math.sin(q.latitude * math.pi / 180);
+          return 0.5 - math.log((1 + s) / (1 - s)) / (4 * math.pi);
+        }
+
+        final scale = 512 * math.pow(2, zoom);
+        return Offset(view.width / 2 + (wx(p) - wx(center)) * scale,
+            view.height / 2 + (wy(p) - wy(center)) * scale);
+      }
+
+      test('puts the points in the middle of the area left clear by the panels', () {
+        const view = Size(400, 800);
+        const a = LatLng(3.10, 101.60), b = LatLng(3.20, 101.70);
+        final fit = fitCamera([a, b], view.width, view.height,
+            top: 80, bottom: 420, side: 40);
+        final pa = onScreen(a, fit.center, fit.zoom, view);
+        final pb = onScreen(b, fit.center, fit.zoom, view);
+        // Middle of the clear area: x = 200, y = (80 + 800 - 420) / 2 = 230.
+        expect((pa.dx + pb.dx) / 2, closeTo(200, 1));
+        expect((pa.dy + pb.dy) / 2, closeTo(230, 1));
+        for (final p in [pa, pb]) {
+          expect(p.dx, inInclusiveRange(39, 361));
+          expect(p.dy, inInclusiveRange(79, 381));
+        }
+        // The tighter side (here the height left above the panel) is filled.
+        expect((pa.dy - pb.dy).abs(), closeTo(300, 1));
+      });
+
+      test('a single point gets the maximum zoom', () {
+        final fit = fitCamera([const LatLng(3.1, 101.6)], 400, 800, maxZoom: 16);
+        expect(fit.zoom, 16);
+        expect(fit.center.latitude, closeTo(3.1, 1e-9));
+      });
     });
 
     test('routeCumulative starts at 0 and grows along the route', () {
