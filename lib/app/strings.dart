@@ -29,7 +29,7 @@ class S {
       const S(AppLang.en);
 
   // ---- general ----
-  String get appName => 'Waze Revamp';
+  String get appName => 'RydaGO';
   String get cancel => _t('Cancel', 'Batal');
   String get close => _t('Close', 'Tutup');
   String get back => _t('Back', 'Kembali');

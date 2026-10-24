@@ -16,7 +16,7 @@ class WazeRevampApp extends ConsumerWidget {
     final choice = ref.watch(settingsProvider.select((s) => s.theme));
     final lang = ref.watch(settingsProvider.select((s) => s.lang));
     return MaterialApp(
-      title: 'Waze Revamp',
+      title: 'RydaGO',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(Brightness.light),
       darkTheme: buildTheme(Brightness.dark),

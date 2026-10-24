@@ -1,11 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
-import 'package:waze_revamp/models/geo.dart';
-import 'package:waze_revamp/models/route.dart';
-import 'package:waze_revamp/models/user_loc.dart';
-import 'package:waze_revamp/state/navigation.dart';
-import 'package:waze_revamp/state/user_loc.dart';
+import 'package:rydago/models/geo.dart';
+import 'package:rydago/models/route.dart';
+import 'package:rydago/models/user_loc.dart';
+import 'package:rydago/state/navigation.dart';
+import 'package:rydago/state/user_loc.dart';
 
 /// A location provider that never touches the geolocator plugin, so tests can
 /// feed navigation exactly the GPS fixes they want.

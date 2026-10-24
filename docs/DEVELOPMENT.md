@@ -74,9 +74,9 @@ Tukar kepada Nominatim `full` (ada POI): tetapkan `NOMINATIM_IMPORT_STYLE=full` 
 1. Dalam `.env`: `BIND_ADDR=0.0.0.0` lalu `docker compose up -d`.
 2. Buka port pada Windows Firewall (PowerShell **Administrator**), terhad kepada rangkaian rumah:
    ```powershell
-   New-NetFirewallRule -DisplayName "Waze Revamp dev" -Direction Inbound -Protocol TCP -LocalPort 8080,8081 -RemoteAddress LocalSubnet -Profile Any -Action Allow
+   New-NetFirewallRule -DisplayName "RydaGO dev" -Direction Inbound -Protocol TCP -LocalPort 8080,8081 -RemoteAddress LocalSubnet -Profile Any -Action Allow
    ```
-   (Buang selepas siap: `Remove-NetFirewallRule -DisplayName "Waze Revamp dev"`.)
+   (Buang selepas siap: `Remove-NetFirewallRule -DisplayName "RydaGO dev"`.)
 3. Cari IP PC (`ipconfig`), buka `http://<ip>:8080` pada telefon. Semak `http://<ip>:8081/health` dahulu jika tak jadi.
 4. **Tetapkan `JWT_SECRET` sebenar** dalam `.env` apabila membuka ke rangkaian; nilai lalai adalah awam.
 

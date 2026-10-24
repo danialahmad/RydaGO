@@ -1,6 +1,6 @@
 {
-    "name": "waze_revamp",
-    "short_name": "waze_revamp",
+    "name": "RydaGO",
+    "short_name": "RydaGO",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

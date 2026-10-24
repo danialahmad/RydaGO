@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart' show Icons;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waze_revamp/app/strings.dart';
+import 'package:rydago/app/strings.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:waze_revamp/app/config.dart';
-import 'package:waze_revamp/app/format.dart';
-import 'package:waze_revamp/models/place.dart';
-import 'package:waze_revamp/models/report.dart';
-import 'package:waze_revamp/models/route.dart';
-import 'package:waze_revamp/models/user_loc.dart';
-import 'package:waze_revamp/services/voice.dart';
-import 'package:waze_revamp/state/saved_places.dart';
-import 'package:waze_revamp/state/settings.dart';
+import 'package:rydago/app/config.dart';
+import 'package:rydago/app/format.dart';
+import 'package:rydago/models/place.dart';
+import 'package:rydago/models/report.dart';
+import 'package:rydago/models/route.dart';
+import 'package:rydago/models/user_loc.dart';
+import 'package:rydago/services/voice.dart';
+import 'package:rydago/state/saved_places.dart';
+import 'package:rydago/state/settings.dart';
 
 import 'helpers.dart';
 

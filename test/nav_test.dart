@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
-import 'package:waze_revamp/models/geo.dart';
-import 'package:waze_revamp/state/navigation.dart';
+import 'package:rydago/models/geo.dart';
+import 'package:rydago/state/navigation.dart';
 
 import 'helpers.dart';
 

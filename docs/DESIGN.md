@@ -49,7 +49,7 @@ Warna jenis laporan ada pada `ReportType` (`lib/models/report.dart`).
 
 - **Hanya ikon Material.** Tiada logo, maskot atau ikon pihak ketiga. Ikon penanda peta dilukis
   semasa jalan daripada ikon Material (`ui/map/marker_images.dart`).
-- Nama **"Waze Revamp"** ialah nama kerja projek. **Jangan guna "Waze"** pada nama app, ikon, atau
+- Nama **"RydaGO"** ialah nama kerja projek. **Jangan guna "Waze"** pada nama app, ikon, atau
   kedai app: ia tanda dagangan. Pilih nama sendiri sebelum diterbitkan (ganti `title` dalam
   `main.dart`, `web/manifest.json`, `web/index.html`, `AndroidManifest.xml`, `pubspec.yaml`).
 - Skrin Tetapan > Tentang sudah menyatakan projek ini bebas. Kekalkan.

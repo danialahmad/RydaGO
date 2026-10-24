@@ -1,11 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waze_revamp/app/strings.dart';
+import 'package:rydago/app/strings.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
-import 'package:waze_revamp/models/geo.dart';
-import 'package:waze_revamp/models/report.dart';
-import 'package:waze_revamp/models/route.dart';
-import 'package:waze_revamp/services/voice.dart';
-import 'package:waze_revamp/state/settings.dart';
+import 'package:rydago/models/geo.dart';
+import 'package:rydago/models/report.dart';
+import 'package:rydago/models/route.dart';
+import 'package:rydago/services/voice.dart';
+import 'package:rydago/state/settings.dart';
 
 import 'helpers.dart';
 
