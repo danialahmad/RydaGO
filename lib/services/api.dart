@@ -1,3 +1,5 @@
+import '../app/strings.dart';
+
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -24,13 +26,19 @@ class Api {
 
   // ---- reports ----------------------------------------------------------------
   /// With a [token] the answer marks the user's own reports (`mine`).
-  static Future<List<Report>> nearbyReports(LatLng around, {String? token}) async {
+  static Future<List<Report>> nearbyReports(
+    LatLng around, {
+    String? token,
+  }) async {
     final res = await http.get(
       Uri.parse(
-          '$kApiUrl/reports?lat=${around.latitude}&lng=${around.longitude}&radius=20000'),
+        '$kApiUrl/reports?lat=${around.latitude}&lng=${around.longitude}&radius=20000',
+      ),
       headers: {'Authorization': ?(token == null ? null : 'Bearer $token')},
     );
-    if (res.statusCode != 200) throw Exception('GET /reports ${res.statusCode}');
+    if (res.statusCode != 200) {
+      throw Exception('GET /reports ${res.statusCode}');
+    }
     return [
       for (final j in jsonDecode(res.body) as List)
         Report.fromJson(j as Map<String, dynamic>),
@@ -57,9 +65,18 @@ class Api {
       }),
     );
     if (res.statusCode == 401) throw const UnauthorizedException();
-    if (res.statusCode != 201) throw Exception('POST /reports ${res.statusCode}');
+    if (res.statusCode != 201) {
+      throw Exception('POST /reports ${res.statusCode}');
+    }
     final r = Report.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
-    return Report(r.type, r.lat, r.lng, id: r.id, subtype: r.subtype, mine: true);
+    return Report(
+      r.type,
+      r.lat,
+      r.lng,
+      id: r.id,
+      subtype: r.subtype,
+      mine: true,
+    );
   }
 
   /// "Masih ada?": [stillThere] true = it is still there, false = it is gone.
@@ -71,21 +88,33 @@ class Api {
   }) async {
     final res = await http.post(
       Uri.parse('$kApiUrl/reports/$reportId/vote'),
-      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
       body: jsonEncode({'vote': stillThere ? 'up' : 'down'}),
     );
     if (res.statusCode == 401) throw const UnauthorizedException();
     if (res.statusCode == 403) throw const OwnReportException();
-    if (res.statusCode != 200) throw Exception('POST /reports/$reportId/vote ${res.statusCode}');
+    if (res.statusCode != 200) {
+      throw Exception('POST /reports/$reportId/vote ${res.statusCode}');
+    }
     final j = jsonDecode(res.body) as Map<String, dynamic>;
     return ((j['up'] as num).toInt(), (j['down'] as num).toInt());
   }
 
   // ---- routing ----------------------------------------------------------------
-  static Future<List<RouteOption>> routes(LatLng from, LatLng to) async {
-    final res = await http.get(Uri.parse(
+  static Future<List<RouteOption>> routes(
+    LatLng from,
+    LatLng to,
+    AppLang lang,
+  ) async {
+    final res = await http.get(
+      Uri.parse(
         '$kApiUrl/route?from=${from.latitude},${from.longitude}'
-        '&to=${to.latitude},${to.longitude}'));
+        '&to=${to.latitude},${to.longitude}&lang=${lang.code}',
+      ),
+    );
     if (res.statusCode != 200) throw Exception('GET /route ${res.statusCode}');
     return [
       for (final j in jsonDecode(res.body) as List)
@@ -94,12 +123,19 @@ class Api {
   }
 
   // ---- address search ---------------------------------------------------------
-  static Future<List<Place>> searchPlaces(String q, LatLng near) async {
-    final uri = Uri.parse('$kApiUrl/places').replace(queryParameters: {
-      'q': q,
-      'lat': '${near.latitude}',
-      'lng': '${near.longitude}',
-    });
+  static Future<List<Place>> searchPlaces(
+    String q,
+    LatLng near,
+    AppLang lang,
+  ) async {
+    final uri = Uri.parse('$kApiUrl/places').replace(
+      queryParameters: {
+        'q': q,
+        'lat': '${near.latitude}',
+        'lng': '${near.longitude}',
+        'lang': lang.code,
+      },
+    );
     final res = await http.get(uri);
     if (res.statusCode != 200) throw Exception('GET /places ${res.statusCode}');
     return [
@@ -123,18 +159,21 @@ class Api {
       );
       final body = jsonDecode(res.body) as Map<String, dynamic>;
       if (res.statusCode != 200 && res.statusCode != 201) {
-        throw AuthFailure(body['error'] as String? ?? 'Ralat (${res.statusCode})');
+        throw AuthFailure(res.statusCode, body['error'] as String?);
       }
       return (body['token'] as String, body['email'] as String);
     } on AuthFailure {
       rethrow;
     } catch (_) {
-      throw const AuthFailure('Server tak dapat dihubungi');
+      throw const AuthFailure(0, null); // 0 = could not reach the server
     }
   }
 }
 
+/// A failed sign-in or registration. The UI turns [status] into text in the app
+/// language with `S.authError`; 0 means the server could not be reached.
 class AuthFailure implements Exception {
-  const AuthFailure(this.message);
-  final String message;
+  const AuthFailure(this.status, this.serverMessage);
+  final int status;
+  final String? serverMessage;
 }

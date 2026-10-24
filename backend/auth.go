@@ -52,12 +52,12 @@ func (s *server) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := mail.ParseAddress(c.Email); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "email tidak sah"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid email"})
 		return
 	}
 	// bcrypt only uses the first 72 bytes, so reject longer passwords outright.
 	if len(c.Password) < 8 || len(c.Password) > 72 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "kata laluan mesti 8 hingga 72 aksara"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password must be 8 to 72 characters"})
 		return
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(c.Password), bcrypt.DefaultCost)
@@ -71,7 +71,7 @@ func (s *server) register(w http.ResponseWriter, r *http.Request) {
 		c.Email, string(hash)).Scan(&id)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "email sudah didaftarkan"})
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "email already registered"})
 		return
 	}
 	if err != nil {
@@ -93,7 +93,7 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 	if errors.Is(err, pgx.ErrNoRows) {
 		// Burn comparable time so unknown emails are not distinguishable by latency.
 		bcrypt.CompareHashAndPassword(s.dummyHash, []byte(c.Password))
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "email atau kata laluan salah"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "wrong email or password"})
 		return
 	}
 	if err != nil {
@@ -101,7 +101,7 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(c.Password)) != nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "email atau kata laluan salah"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "wrong email or password"})
 		return
 	}
 	s.respondWithToken(w, http.StatusOK, id, c.Email)
@@ -139,11 +139,11 @@ func (s *server) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		uid, present, ok := s.userFromRequest(r)
 		if !present {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "login diperlukan"})
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "login required"})
 			return
 		}
 		if !ok {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "token tidak sah atau tamat tempoh"})
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid or expired token"})
 			return
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userCtxKey{}, uid)))

@@ -83,7 +83,7 @@ func TestManeuverText(t *testing.T) {
 		{"unknown type falls back", 99, nil, 0, "Teruskan"},
 	}
 	for _, c := range cases {
-		if got := maneuverText(c.typ, c.streets, c.exit); got != c.want {
+		if got := maneuverText("ms", c.typ, c.streets, c.exit); got != c.want {
 			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
 		}
 	}
@@ -147,7 +147,7 @@ func fakeValhalla(t *testing.T, failWhen func(opts map[string]any) bool) (*httpt
 				"shape": shape,
 				"maneuvers": []map[string]any{
 					{"type": 1, "length": 0.5, "begin_shape_index": 0, "street_names": []string{"Jalan A"}},
-					{"type": 10, "length": 6.0, "begin_shape_index": 1, "street_names": []string{"Jalan B"}},
+					{"type": 10, "length": 6.0, "begin_shape_index": 1, "street_names": []string{"Jalan B"}, "toll": true},
 					{"type": 4, "length": 0.0, "begin_shape_index": 2},
 				},
 			}},
@@ -187,7 +187,7 @@ func TestRouteReturnsThreeVariants(t *testing.T) {
 		t.Fatalf("got %d routes, want 3", len(routes))
 	}
 	labels := []string{routes[0].Label, routes[1].Label, routes[2].Label}
-	if strings.Join(labels, "|") != "Terpantas|Tanpa tol|Jarak terpendek" {
+	if strings.Join(labels, "|") != "Fastest|No tolls|Shortest" {
 		t.Errorf("labels out of order: %v", labels)
 	}
 	r := routes[0]
@@ -197,7 +197,7 @@ func TestRouteReturnsThreeVariants(t *testing.T) {
 	if len(r.Points) != 3 || math.Abs(r.Points[2][1]-101.7274) > 1e-6 {
 		t.Errorf("points not decoded: %v", r.Points)
 	}
-	wantText := []string{"Mulakan perjalanan di Jalan A", "Belok kanan menuju Jalan B", "Anda telah sampai"}
+	wantText := []string{"Start your trip on Jalan A", "Turn right onto Jalan B", "You have arrived"}
 	if len(r.Maneuvers) != 3 {
 		t.Fatalf("got %d maneuvers", len(r.Maneuvers))
 	}
@@ -309,5 +309,48 @@ func TestRouteRejectsBadInput(t *testing.T) {
 		if rec := getRoute(t, q); rec.Code != http.StatusBadRequest {
 			t.Errorf("%q: status %d, want 400", q, rec.Code)
 		}
+	}
+}
+
+func TestRouteLanguageAndTolls(t *testing.T) {
+	srv, _ := fakeValhalla(t, nil)
+	useValhalla(t, srv.URL)
+
+	var routes []routeOut
+	rec := getRoute(t, "from=3.1579,101.7116&to=3.1602,101.7274&lang=ms")
+	if err := json.Unmarshal(rec.Body.Bytes(), &routes); err != nil || len(routes) != 3 {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body)
+	}
+	if routes[0].Label != "Terpantas" || routes[1].ID != "notoll" || routes[1].Label != "Tanpa tol" {
+		t.Errorf("malay labels/ids: %q %q %q", routes[0].Label, routes[1].ID, routes[1].Label)
+	}
+	if got := routes[0].Maneuvers[1].Text; got != "Belok kanan menuju Jalan B" {
+		t.Errorf("malay text: %q", got)
+	}
+	// 6 km of the fake trip is toll road: 6 * 0.11 = RM0.7, raised to the RM1.0 minimum.
+	toll := routes[0].Toll
+	if toll == nil || toll.Km != 6 || toll.Rm != 1.0 || !toll.Estimate {
+		t.Errorf("toll = %+v, want 6 km, RM1.0, estimate", toll)
+	}
+}
+
+func TestTollFor(t *testing.T) {
+	if tollFor(0) != nil || tollFor(0.05) != nil {
+		t.Error("no toll road should give no toll")
+	}
+	if got := tollFor(100); got.Rm != 11.0 || got.Km != 100 {
+		t.Errorf("100 km: %+v, want RM11.0", got)
+	}
+	if got := tollFor(2); got.Rm != 1.0 {
+		t.Errorf("short stretch should cost the minimum: %+v", got)
+	}
+}
+
+func TestManeuverTextEnglish(t *testing.T) {
+	if got := maneuverText("en", 26, []string{"Jalan C"}, 2); got != "Enter the roundabout, take exit 2 onto Jalan C" {
+		t.Errorf("got %q", got)
+	}
+	if got := maneuverText("xx", 15, nil, 0); got != "Turn left" {
+		t.Errorf("unknown language should be English: %q", got)
 	}
 }

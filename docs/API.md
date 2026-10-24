@@ -15,7 +15,7 @@ Sumber kod: `backend/main.go`, `auth.go`, `route.go`, `places.go`. Ujian: `backe
 | GET | `/reports` | tidak (token pilihan) | Laporan berdekatan yang masih sah |
 | POST | `/reports` | **ya** | Hantar laporan |
 | POST | `/reports/{id}/vote` | **ya** | "Masih ada?": undi naik atau turun |
-| GET | `/route` | tidak | Tiga pilihan laluan dengan arahan belokan |
+| GET | `/route` | tidak | Tiga pilihan laluan dengan arahan belokan, had laju dan tol (`?lang=en|ms`) |
 | GET | `/places` | tidak | Carian alamat atau tempat |
 
 Pengesahan: `Authorization: Bearer <token>`. Token sah 7 hari.
@@ -79,15 +79,18 @@ Subjenis pertama ialah lalai yang dihantar app. **Jadual ini mesti sama** dengan
 | `camera` | Kamera | `speed`, `red_light` |
 | `closed` | Jalan tutup | `road`, `lane` |
 
-## `GET /route?from=lat,lng&to=lat,lng`
+## `GET /route?from=lat,lng&to=lat,lng&lang=en`
+
+`lang`: `en` (lalai) atau `ms`. Menentukan bahasa `label`, `note` dan `text`. Mesej ralat API sentiasa English; app menterjemah mengikut status.
 
 Minta Valhalla tiga kali selari. Pulangkan hanya yang berjaya.
 
 ```jsonc
 [
   {
-    "label": "Terpantas",          // juga "Tanpa tol", "Jarak terpendek"
-    "note": "Laluan terpantas",
+    "id": "fastest",             // stabil merentas bahasa: "fastest", "notoll", "shortest"
+    "label": "Fastest",          // diterjemah (ms: "Terpantas", "Tanpa tol", "Jarak terpendek")
+    "note": "Fastest route",
     "via": "E12",                  // jalan paling panjang dalam laluan, boleh tiada
     "minutes": 6,
     "km": 4.9,
@@ -98,6 +101,7 @@ Minta Valhalla tiga kali selari. Pulangkan hanya yang berjaya.
       {"text": "Anda telah sampai", "type": 4, "km": 0, "index": 164}
     ],
     "limits": [{"from": 0, "to": 40, "kmh": 60}]   // had laju; hanya di mana OSM tahu
+    ,"toll": {"km": 12.4, "rm": 1.4, "estimate": true}  // tiada jika laluan tak guna jalan tol
   }
 ]
 ```
@@ -105,11 +109,15 @@ Minta Valhalla tiga kali selari. Pulangkan hanya yang berjaya.
 - `limits[]`: had laju dalam km/j untuk segmen `points[from]` hingga `points[to]`. Dianggar daripada Valhalla
   `trace_attributes`. Hanya kira-kira sepertiga jalan di Malaysia ada `maxspeed` dalam OSM, jadi senarai
   mungkin pendek atau kosong. App membawa had terakhir ke hadapan 400 m, selepas itu menyembunyikan tanda.
+- `toll`: panjang jalan tol (Valhalla menandakan jalan tol dari OSM) dan **anggaran** harga untuk kereta kelas 1:
+  `km × TOLL_RM_PER_KM` (lalai RM0.11, ditentukur dengan satu kadar PLUS yang diterbitkan, bukan rasmi), minimum
+  `TOLL_MIN_RM` (RM1.00). Boleh ditukar melalui pembolehubah persekitaran API. Pilihan "Tanpa tol" hanya *mengelak* tol bila boleh,
+  jadi ia masih boleh ada tol; `toll` menunjukkan sebenarnya.
 - `maneuvers[].index` ialah indeks dalam `points` di mana langkah bermula.
 - `type` ialah [jenis belokan Valhalla](https://valhalla.github.io/valhalla/api/turn-by-turn/api-reference/):
   1-3 mula, 4-6 tiba, 9-16 belok, 17-24 ramp/jalan keluar/lorong, 25 bergabung, 26-27 bulatan.
   App memetakannya kepada ikon dalam `maneuverIcon` (`lib/ui/widgets/nav_overlay.dart`).
-- `text` dibina di API dalam Bahasa Melayu (`maneuverText`). `street` ialah nama jalan sahaja.
+- `text` dibina di API dalam bahasa `lang` (`maneuverText` dalam `lang.go`). `street` ialah nama jalan sahaja.
 - Ralat: `400` jika `from`/`to` bukan `lat,lng` yang sah; `502` jika semua panggilan Valhalla gagal (contohnya jubin masih dibina).
 - Masa ialah anggaran Valhalla **tanpa trafik semasa**.
 

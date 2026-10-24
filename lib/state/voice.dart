@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../app/strings.dart';
 import '../services/voice.dart';
 import 'navigation.dart';
 import 'reports.dart';
@@ -23,12 +24,14 @@ class VoiceGuide extends Notifier<void> {
         return;
       }
       final settings = ref.read(settingsProvider);
+      final strings = S(settings.lang);
       // One sentence per update: speak() interrupts, so never queue two.
-      final text = _planner.next(next) ??
-          _planner.nextAlert(next, ref.read(reportsProvider)) ??
-          _planner.speeding(next, settings.speedAlert.toleranceKmh);
+      final text =
+          _planner.next(next, strings) ??
+          _planner.nextAlert(next, ref.read(reportsProvider), strings) ??
+          _planner.speeding(next, settings.speedAlert.toleranceKmh, strings);
       if (text != null && settings.voiceOn) {
-        ref.read(speakerProvider).speak(text);
+        ref.read(speakerProvider).speak(text, settings.lang.ttsLocale);
       }
     });
     ref.listen(settingsProvider, (prev, next) {

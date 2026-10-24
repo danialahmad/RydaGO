@@ -36,7 +36,7 @@ type placeOut struct {
 func (s *server) places(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	if n := len([]rune(q)); n < 2 || n > 200 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "q mesti 2 hingga 200 aksara"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "q must be 2 to 200 characters"})
 		return
 	}
 	params := url.Values{}
@@ -46,7 +46,11 @@ func (s *server) places(w http.ResponseWriter, r *http.Request) {
 	params.Set("limit", "8")
 	params.Set("dedupe", "1")
 	params.Set("countrycodes", "my,sg,bn")
-	params.Set("accept-language", "ms,en")
+	if langFrom(r) == langMS {
+		params.Set("accept-language", "ms,en")
+	} else {
+		params.Set("accept-language", "en,ms")
+	}
 	if lat, err := strconv.ParseFloat(r.URL.Query().Get("lat"), 64); err == nil {
 		if lng, err := strconv.ParseFloat(r.URL.Query().Get("lng"), 64); err == nil {
 			// left,top,right,bottom: a soft preference (not bounded) around the user.
@@ -57,7 +61,7 @@ func (s *server) places(w http.ResponseWriter, r *http.Request) {
 	out, err := searchNominatim(r.Context(), params)
 	if err != nil {
 		log.Printf("nominatim: %v", err)
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "carian tidak tersedia"})
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "search unavailable"})
 		return
 	}
 	writeJSON(w, http.StatusOK, out)

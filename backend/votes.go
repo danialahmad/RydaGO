@@ -17,7 +17,7 @@ import (
 func (s *server) voteReport(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil || id <= 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id laporan tak sah"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid report id"})
 		return
 	}
 	var in struct {
@@ -37,7 +37,7 @@ func (s *server) voteReport(w http.ResponseWriter, r *http.Request) {
 	var owner *int64
 	err = s.db.QueryRow(r.Context(), `SELECT user_id FROM reports WHERE id = $1`, id).Scan(&owner)
 	if errors.Is(err, pgx.ErrNoRows) {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "laporan tak dijumpai"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "report not found"})
 		return
 	}
 	if err != nil {
@@ -46,7 +46,7 @@ func (s *server) voteReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if owner != nil && *owner == uid {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "tak boleh mengundi laporan sendiri"})
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "cannot vote on your own report"})
 		return
 	}
 

@@ -42,7 +42,7 @@ Satu pakej Go (`package main`), tanpa lapisan tambahan kerana ia masih kecil.
 |---|---|
 | `main.go` | Penghala chi, migrasi goose semasa mula, `/health`, `/reports`, jadual jenis dan subjenis laporan, CORS |
 | `auth.go` | Daftar, log masuk (bcrypt), JWT HS256 7 hari, middleware `requireAuth` |
-| `route.go` | `/route`: tiga panggilan selari ke Valhalla, nyahkod polyline6, bina teks belokan Melayu |
+| `route.go` | `/route`: tiga panggilan selari ke Valhalla, nyahkod polyline6, bina teks belokan (English atau Melayu, `lang.go`) dan anggaran tol (`toll.go`) |
 | `places.go` | `/places`: proksi ke Nominatim, ringkaskan respons |
 | `migrations/` | SQL goose, dibenamkan dalam binari (`//go:embed`). Berjalan automatik bila API bermula |
 | `*_test.go` | Ujian unit. Valhalla dan Nominatim digantikan pelayan palsu `httptest` |
@@ -63,8 +63,8 @@ Tiada kerja pembersihan: baris lama kekal dalam jadual, cuma tak dipulangkan.
 
 Keputusan penting:
 
-- **Teks belokan Bahasa Melayu dibina di API** (`maneuverText` dalam `route.go`), kerana Valhalla
-  tak menyokong bahasa Melayu. Suara dan banner menggunakan teks yang sama.
+- **Teks belokan dibina di API** (`maneuverText` dalam `lang.go`) dalam English atau Melayu ikut `?lang=`, kerana Valhalla
+  tak menyokong bahasa Melayu. Suara dan banner menggunakan teks yang sama. Teks lain dalam app ada dalam `lib/app/strings.dart`.
 - **Tiga laluan = tiga panggilan Valhalla** (`routeVariants`): biasa, `use_tolls: 0`, `shortest: true`.
   Kalau satu gagal, yang lain tetap dipulangkan.
 - **JWT**: `JWT_SECRET` wajib dan mesti 32+ aksara, kalau tidak API enggan bermula.

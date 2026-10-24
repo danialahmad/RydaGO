@@ -8,6 +8,7 @@ import '../models/report.dart';
 import '../models/route.dart';
 import '../models/user_loc.dart';
 import '../services/api.dart';
+import 'settings.dart';
 import 'trip.dart';
 import 'user_loc.dart';
 
@@ -17,7 +18,8 @@ const kHardOffRouteM = 120.0; // so far off that we re-route straight away
 const kArriveM = 30.0;
 const kMaxAccuracyM = 100.0; // ignore fixes less precise than this
 const kRerouteCooldown = Duration(seconds: 8);
-const kReportOnRouteM = 60.0; // a report this close to the route line counts as "on our road"
+const kReportOnRouteM =
+    60.0; // a report this close to the route line counts as "on our road"
 const kLimitCarryM = 400.0; // keep showing the last known speed limit this far
 
 /// Where we are on the active route, derived from the latest GPS fix.
@@ -101,13 +103,22 @@ class NavState {
 
   /// Reports that lie on the route within [withinM] ahead of us, nearest first.
   /// With [passedM] > 0, reports we just drove past are included as well.
-  List<ReportAhead> reportsAhead(Iterable<Report> reports,
-      {double withinM = 800, double passedM = 0}) {
+  List<ReportAhead> reportsAhead(
+    Iterable<Report> reports, {
+    double withinM = 800,
+    double passedM = 0,
+  }) {
     final out = <ReportAhead>[];
     for (final r in reports) {
       // Cheap straight-line rejection before projecting onto the route.
       if (haversineM(pos, r.pos) > withinM + passedM + 100) continue;
-      final p = projectOnRoute(r.pos, route.points, cum, fromSeg: seg - 5, toSeg: seg + 200);
+      final p = projectOnRoute(
+        r.pos,
+        route.points,
+        cum,
+        fromSeg: seg - 5,
+        toSeg: seg + 200,
+      );
       if (p.distM > kReportOnRouteM) continue;
       final ahead = p.alongM - alongM;
       if (ahead < -passedM || ahead > withinM) continue;
@@ -126,19 +137,18 @@ class NavState {
     double? offRouteM,
     double? speedKmh,
     double? heading,
-  }) =>
-      NavState(
-        route: route,
-        cum: cum,
-        alongM: alongM ?? this.alongM,
-        pos: pos ?? this.pos,
-        seg: seg ?? this.seg,
-        arrived: arrived ?? this.arrived,
-        rerouting: rerouting ?? this.rerouting,
-        offRouteM: offRouteM ?? this.offRouteM,
-        speedKmh: speedKmh,
-        heading: heading,
-      );
+  }) => NavState(
+    route: route,
+    cum: cum,
+    alongM: alongM ?? this.alongM,
+    pos: pos ?? this.pos,
+    seg: seg ?? this.seg,
+    arrived: arrived ?? this.arrived,
+    rerouting: rerouting ?? this.rerouting,
+    offRouteM: offRouteM ?? this.offRouteM,
+    speedKmh: speedKmh,
+    heading: heading,
+  );
 }
 
 /// A report lying on the road ahead, and how far along the route it is from us
@@ -165,7 +175,11 @@ class NavNotifier extends Notifier<NavState?> {
     _offCount = 0;
     _lastReroute = DateTime.now();
     state = NavState(
-        route: r, cum: routeCumulative(r.points), alongM: 0, pos: r.points.first);
+      route: r,
+      cum: routeCumulative(r.points),
+      alongM: 0,
+      pos: r.points.first,
+    );
     _onFix(ref.read(userLocProvider));
   }
 
@@ -189,16 +203,21 @@ class NavNotifier extends Notifier<NavState?> {
     );
 
     final dest = ref.read(destinationProvider);
-    final atDestination = dest != null && haversineM(loc.pos, dest.pos) <= kArriveM;
-    if (atDestination || (next.remainingM <= kArriveM && p.distM <= kOffRouteM)) {
+    final atDestination =
+        dest != null && haversineM(loc.pos, dest.pos) <= kArriveM;
+    if (atDestination ||
+        (next.remainingM <= kArriveM && p.distM <= kOffRouteM)) {
       state = next.copyWith(alongM: s.totalM, arrived: true);
       return;
     }
 
     state = next;
     _offCount = onRoute ? 0 : _offCount + 1;
-    final cooledDown = DateTime.now().difference(_lastReroute) > kRerouteCooldown;
-    if (!s.rerouting && cooledDown && (p.distM > kHardOffRouteM || _offCount >= 3)) {
+    final cooledDown =
+        DateTime.now().difference(_lastReroute) > kRerouteCooldown;
+    if (!s.rerouting &&
+        cooledDown &&
+        (p.distM > kHardOffRouteM || _offCount >= 3)) {
       _reroute(loc.pos);
     }
   }
@@ -210,14 +229,25 @@ class NavNotifier extends Notifier<NavState?> {
     final before = state;
     if (dest == null || before == null) return;
     state = before.copyWith(
-        rerouting: true, speedKmh: before.speedKmh, heading: before.heading);
+      rerouting: true,
+      speedKmh: before.speedKmh,
+      heading: before.heading,
+    );
     _lastReroute = DateTime.now();
     try {
-      final routes = await Api.routes(from, dest.pos);
+      final routes = await Api.routes(
+        from,
+        dest.pos,
+        ref.read(settingsProvider).lang,
+      );
       final current = state;
       if (current == null || current.arrived || routes.isEmpty) return;
-      final r = routes.firstWhere((r) => r.label == before.route.label,
-          orElse: () => routes.first);
+      final r = routes.firstWhere(
+        (r) => before.route.id.isEmpty
+            ? r.label == before.route.label
+            : r.id == before.route.id,
+        orElse: () => routes.first,
+      );
       _offCount = 0;
       state = NavState(
         route: r,
@@ -232,7 +262,10 @@ class NavNotifier extends Notifier<NavState?> {
       final current = state;
       if (current != null) {
         state = current.copyWith(
-            rerouting: false, speedKmh: current.speedKmh, heading: current.heading);
+          rerouting: false,
+          speedKmh: current.speedKmh,
+          heading: current.heading,
+        );
       }
     }
   }
@@ -241,7 +274,13 @@ class NavNotifier extends Notifier<NavState?> {
   /// so routes that cross themselves do not make progress jump around.
   RouteProjection _project(LatLng p, NavState s) {
     final pts = s.route.points;
-    final near = projectOnRoute(p, pts, s.cum, fromSeg: s.seg - 3, toSeg: s.seg + 60);
+    final near = projectOnRoute(
+      p,
+      pts,
+      s.cum,
+      fromSeg: s.seg - 3,
+      toSeg: s.seg + 60,
+    );
     if (near.distM <= kOffRouteM) return near;
     final all = projectOnRoute(p, pts, s.cum);
     return all.distM < near.distM ? all : near;
@@ -256,7 +295,8 @@ bool startNavigation(WidgetRef ref) {
   if (!ref.read(userLocProvider).isReal) return false;
   final routes = ref.read(routesProvider).value ?? const <RouteOption>[];
   if (routes.isEmpty) return false;
-  final r = routes[clampRouteIndex(ref.read(routeIndexProvider), routes.length)];
+  final r =
+      routes[clampRouteIndex(ref.read(routeIndexProvider), routes.length)];
   ref.read(navProvider.notifier).start(r);
   ref.read(navigatingProvider.notifier).set(true);
   return true;

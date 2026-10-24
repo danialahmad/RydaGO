@@ -11,10 +11,10 @@ komuniti, tetapi dengan identiti dan ikon sendiri.
    Semasa memandu, teks penting (jarak belokan) 38 px tebal.
 3. **Satu tindakan utama setiap peringkat**, dan ia berwarna:
    *hijau* = pergi (Mula, Selesai), *oren* = lapor, *merah* = hentikan (Tamat).
-4. **Tunjuk keadaan, jangan diam.** Memuat, ralat dan "tiada" semuanya ada teks Melayu yang jelas dan
+4. **Tunjuk keadaan, jangan diam.** Memuat, ralat dan "tiada" semuanya ada teks yang jelas (kedua-dua bahasa) dan
    tindakan seterusnya (cuba lagi, hidupkan demo, benarkan lokasi). Tiada butang yang tak berfungsi.
 5. **Cerah dan gelap** sama-sama kelas pertama. Peta mengikut tema.
-6. **Bahasa Melayu** santai tapi sopan. Ayat pendek. "Mau ke mana?", "Anda telah sampai".
+6. **Bahasa**: English lalai, Melayu pilihan. Santai tapi sopan, ayat pendek. "Where to?" / "Mau ke mana?", "You have arrived" / "Anda telah sampai".
 
 ## Peringkat skrin utama (`ui/screens/map_screen.dart`)
 
@@ -61,6 +61,6 @@ Warna jenis laporan ada pada `ReportType` (`lib/models/report.dart`).
 1. Warna dan jejari dari `AppColors` / tema, jangan tulis nilai baru di dalam widget.
 2. Sediakan keadaan **memuat**, **ralat** dan **kosong**.
 3. Uji mod **gelap** dan skrin kecil (360 px lebar).
-4. Teks baru dalam Bahasa Melayu; masa guna `formatClock` (PG/PTG), jarak guna `formatDistance`.
+4. Teks baru: tambah dalam `lib/app/strings.dart` (English dan Melayu); masa guna `formatClock`, jarak guna `formatDistance`.
 5. Kalau widget menunjuk nombor yang berubah semasa memandu, jangan bina semula seluruh skrin:
    `ref.watch(navProvider.select(...))` atau widget kecil sendiri.

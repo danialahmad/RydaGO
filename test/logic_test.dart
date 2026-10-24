@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart' show Icons;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waze_revamp/app/strings.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:waze_revamp/app/config.dart';
@@ -11,10 +12,16 @@ import 'package:waze_revamp/models/route.dart';
 import 'package:waze_revamp/models/user_loc.dart';
 import 'package:waze_revamp/services/voice.dart';
 import 'package:waze_revamp/state/saved_places.dart';
+import 'package:waze_revamp/state/settings.dart';
 
 import 'helpers.dart';
 
+// The planner speaks the language it is given; most expectations here are Malay.
+const ms = S(AppLang.ms);
+const en = S(AppLang.en);
+
 void main() {
+  i18nTests();
   group('formatting', () {
     test('formatDistance: metres to the nearest 10 below 1 km, km with one decimal above', () {
       expect(formatDistance(0), '0 m');
@@ -25,17 +32,17 @@ void main() {
     });
 
     test('formatDuration', () {
-      expect(formatDuration(1), '1 min');
-      expect(formatDuration(59), '59 min');
-      expect(formatDuration(60), '1 j');
-      expect(formatDuration(135), '2 j 15 min');
+      expect(formatDuration(1, ms), '1 min');
+      expect(formatDuration(59, ms), '59 min');
+      expect(formatDuration(60, ms), '1 j');
+      expect(formatDuration(135, ms), '2 j 15 min');
     });
 
     test('formatClock uses a 12-hour clock with PG (pagi) and PTG (petang)', () {
-      expect(formatClock(DateTime(2026, 1, 1, 0, 5)), '12:05 PG');
-      expect(formatClock(DateTime(2026, 1, 1, 9, 30)), '9:30 PG');
-      expect(formatClock(DateTime(2026, 1, 1, 12, 0)), '12:00 PTG');
-      expect(formatClock(DateTime(2026, 1, 1, 15, 22)), '3:22 PTG');
+      expect(formatClock(DateTime(2026, 1, 1, 0, 5), ms), '12:05 PG');
+      expect(formatClock(DateTime(2026, 1, 1, 9, 30), ms), '9:30 PG');
+      expect(formatClock(DateTime(2026, 1, 1, 12, 0), ms), '12:00 PTG');
+      expect(formatClock(DateTime(2026, 1, 1, 15, 22), ms), '3:22 PTG');
     });
   });
 
@@ -44,41 +51,41 @@ void main() {
       final r = straightRoute();
       final p = VoicePlanner();
       // At the very start the first maneuver is "close": say it.
-      expect(p.next(navAt(r, 0)), 'Mulakan perjalanan di Jalan A');
-      expect(p.next(navAt(r, 5)), isNull); // nothing new
+      expect(p.next(navAt(r, 0), ms), 'Mulakan perjalanan di Jalan A');
+      expect(p.next(navAt(r, 5), ms), isNull); // nothing new
       // 455 m before the turn: far announcement, distance rounded to 50 m.
-      expect(p.next(navAt(r, 100)), 'Dalam 450 meter, belok kanan menuju Jalan B');
-      expect(p.next(navAt(r, 150)), isNull); // already said
+      expect(p.next(navAt(r, 100), ms), 'Dalam 450 meter, belok kanan menuju Jalan B');
+      expect(p.next(navAt(r, 150), ms), isNull); // already said
       // Within 150 m: the short form.
-      expect(p.next(navAt(r, 450)), 'Belok kanan menuju Jalan B');
-      expect(p.next(navAt(r, 500)), isNull);
+      expect(p.next(navAt(r, 450), ms), 'Belok kanan menuju Jalan B');
+      expect(p.next(navAt(r, 500), ms), isNull);
     });
 
     test('says nothing about the arrival maneuver itself, only the arrival', () {
       final r = straightRoute();
       final p = VoicePlanner();
-      p.next(navAt(r, 0));
-      p.next(navAt(r, 450)); // turn announced
-      expect(p.next(navAt(r, 1050)), isNull); // last maneuver is the arrival: stay quiet
-      expect(p.next(navAt(r, 1110, arrived: true)), 'Anda telah sampai di destinasi');
-      expect(p.next(navAt(r, 1110, arrived: true)), isNull);
+      p.next(navAt(r, 0), ms);
+      p.next(navAt(r, 450), ms); // turn announced
+      expect(p.next(navAt(r, 1050), ms), isNull); // last maneuver is the arrival: stay quiet
+      expect(p.next(navAt(r, 1110, arrived: true), ms), 'Anda telah sampai di destinasi');
+      expect(p.next(navAt(r, 1110, arrived: true), ms), isNull);
     });
 
     test('announces re-routing once per re-route', () {
       final r = straightRoute();
       final p = VoicePlanner();
-      expect(p.next(navAt(r, 0, rerouting: true)), 'Mengira semula laluan');
-      expect(p.next(navAt(r, 0, rerouting: true)), isNull);
-      p.next(navAt(r, 0)); // re-route finished
-      expect(p.next(navAt(r, 0, rerouting: true)), 'Mengira semula laluan');
+      expect(p.next(navAt(r, 0, rerouting: true), ms), 'Mengira semula laluan');
+      expect(p.next(navAt(r, 0, rerouting: true), ms), isNull);
+      p.next(navAt(r, 0), ms); // re-route finished
+      expect(p.next(navAt(r, 0, rerouting: true), ms), 'Mengira semula laluan');
     });
 
     test('reset starts a fresh trip', () {
       final r = straightRoute();
       final p = VoicePlanner();
-      expect(p.next(navAt(r, 0)), isNotNull);
+      expect(p.next(navAt(r, 0), ms), isNotNull);
       p.reset();
-      expect(p.next(navAt(r, 0)), 'Mulakan perjalanan di Jalan A');
+      expect(p.next(navAt(r, 0), ms), 'Mulakan perjalanan di Jalan A');
     });
   });
 
@@ -105,14 +112,14 @@ void main() {
           {'id': 1, 'type': 'police', 'subtype': 'hidden', 'lat': 3.1, 'lng': 101.7});
       expect(r.type, ReportType.police);
       expect(r.subtype, 'hidden');
-      expect(r.title, 'Polis · Tersembunyi');
+      expect(r.title(ms), 'Polis · Tersembunyi');
       expect(r.pos, const LatLng(3.1, 101.7));
     });
 
     test('a report without a subtype (or an unknown one) falls back to the type label', () {
-      expect(Report.fromJson({'type': 'jam', 'lat': 1.0, 'lng': 2.0}).title, 'Kesesakan');
+      expect(Report.fromJson({'type': 'jam', 'lat': 1.0, 'lng': 2.0}).title(ms), 'Kesesakan');
       expect(
-          Report.fromJson({'type': 'jam', 'subtype': 'nonsense', 'lat': 1.0, 'lng': 2.0}).title,
+          Report.fromJson({'type': 'jam', 'subtype': 'nonsense', 'lat': 1.0, 'lng': 2.0}).title(ms),
           'Kesesakan');
     });
   });
@@ -218,6 +225,62 @@ void main() {
       await n.add(Place('Tempat 5', '', Icons.place, const LatLng(3.05, 101.0))); // same place again
       expect(c.read(recentsProvider).first.name, 'Tempat 5');
       expect(c.read(recentsProvider).where((p) => p.name == 'Tempat 5').length, 1);
+    });
+  });
+}
+
+void i18nTests() {
+  group('language', () {
+    test('English is the default for settings and strings', () {
+      expect(const AppSettings().lang, AppLang.en);
+      expect(const S(AppLang.en).whereTo, 'Where to?');
+      expect(const S(AppLang.ms).whereTo, 'Mau ke mana?');
+    });
+
+    test('durations and clocks follow the language', () {
+      expect(formatDuration(135, en), '2 h 15 min');
+      expect(formatDuration(135, ms), '2 j 15 min');
+      expect(formatClock(DateTime(2026, 1, 1, 15, 22), en), '3:22 PM');
+      expect(formatClock(DateTime(2026, 1, 1, 15, 22)), '3:22 PM'); // English by default
+    });
+
+    test('report names are translated, with natural English phrasing', () {
+      final r = Report(ReportType.police, 0, 0, subtype: 'hidden');
+      expect(r.title(en), 'Police · Hidden');
+      expect(r.spokenName(en), 'Police, hidden');
+      expect(Report(ReportType.camera, 0, 0, subtype: 'speed').spokenName(en), 'Speed camera');
+    });
+
+    test('auth errors are worded from the status, not the server text', () {
+      expect(en.authError(401, 'wrong email or password'), 'Wrong email or password');
+      expect(ms.authError(409, null), 'Email sudah didaftarkan');
+      expect(en.authError(0, null), 'Cannot reach the server');
+    });
+
+    test('every report type and subtype has a Malay translation', () {
+      for (final t in ReportType.values) {
+        expect(ms.reportType(t.name, t.label), isNot(t.label), reason: t.name);
+        for (final sub in t.subtypes) {
+          // "Pothole" -> "Lubang" etc. Types sharing a word with their English name are fine.
+          expect(sub.localLabel(ms), isNotEmpty, reason: sub.key);
+        }
+      }
+    });
+
+    test('RouteOption reads id and toll, and tolerates their absence', () {
+      final base = {
+        'label': 'Fastest', 'note': '', 'minutes': 1, 'km': 1.0,
+        'points': [[3.0, 101.0], [3.0, 101.001]], 'maneuvers': <Map<String, dynamic>>[],
+      };
+      final withToll = RouteOption.fromJson({
+        ...base,
+        'id': 'fastest',
+        'toll': {'km': 42.5, 'rm': 5.8, 'estimate': true},
+      });
+      expect(withToll.id, 'fastest');
+      expect((withToll.toll!.km, withToll.toll!.rm, withToll.toll!.estimate), (42.5, 5.8, true));
+      final none = RouteOption.fromJson(base);
+      expect((none.id, none.toll), ('', null));
     });
   });
 }

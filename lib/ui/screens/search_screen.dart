@@ -3,17 +3,19 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/strings.dart';
 import '../../app/theme.dart';
 import '../../models/place.dart';
 import '../../services/api.dart';
 import '../../state/saved_places.dart';
+import '../../state/settings.dart';
 import '../../state/trip.dart';
 import '../../state/user_loc.dart';
 
 /// What picking a result does.
 enum SearchPurpose { destination, home, work }
 
-/// "Mau ke mana?": Home/Work, favourites, recent places, and live address search.
+/// "Where to?": Home/Work, favourites, recent places, and live address search.
 class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({super.key, this.purpose = SearchPurpose.destination});
   final SearchPurpose purpose;
@@ -56,7 +58,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     });
     _debounce = Timer(const Duration(milliseconds: 350), () async {
       try {
-        final r = await Api.searchPlaces(q, ref.read(userLocProvider).pos);
+        final r = await Api.searchPlaces(
+          q,
+          ref.read(userLocProvider).pos,
+          ref.read(settingsProvider).lang,
+        );
         if (!mounted || seq != _seq) return;
         setState(() {
           _results = r;
@@ -67,7 +73,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         setState(() {
           _results = const [];
           _loading = false;
-          _error = 'Carian tak dapat dihubungi. Pelayan carian mungkin masih bersedia, cuba lagi sebentar.';
+          _error = 'search'; // shown as S.searchFailed
         });
       }
     });
@@ -76,24 +82,25 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   void _pick(Place p) {
     final saved = ref.read(savedPlacesProvider.notifier);
     final messenger = ScaffoldMessenger.of(context);
+    final s = S.of(context);
     switch (widget.purpose) {
       case SearchPurpose.destination:
         chooseDestination(ref, p);
       case SearchPurpose.home:
         saved.setHome(p);
-        messenger.showSnackBar(SnackBar(content: Text('Rumah ditetapkan: ${p.name}')));
+        messenger.showSnackBar(SnackBar(content: Text(s.homeSet(p.name))));
       case SearchPurpose.work:
         saved.setWork(p);
-        messenger.showSnackBar(SnackBar(content: Text('Tempat kerja ditetapkan: ${p.name}')));
+        messenger.showSnackBar(SnackBar(content: Text(s.workSet(p.name))));
     }
     Navigator.of(context).pop();
   }
 
   String get _title => switch (widget.purpose) {
-        SearchPurpose.destination => 'Mau ke mana?',
-        SearchPurpose.home => 'Tetapkan rumah',
-        SearchPurpose.work => 'Tetapkan tempat kerja',
-      };
+    SearchPurpose.destination => S.of(context).whereTo,
+    SearchPurpose.home => S.of(context).setHomeTitle,
+    SearchPurpose.work => S.of(context).setWorkTitle,
+  };
 
   Widget _tile(Place p, {IconData? icon, bool starrable = false}) {
     final saved = ref.watch(savedPlacesProvider);
@@ -104,17 +111,24 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         backgroundColor: AppColors.brand.withValues(alpha: 0.16),
         child: Icon(icon ?? p.icon, color: AppColors.brandDeep),
       ),
-      title: Text(p.name,
-          maxLines: 1, overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+      title: Text(
+        p.name,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+      ),
       subtitle: p.area.isEmpty
           ? null
           : Text(p.area, maxLines: 1, overflow: TextOverflow.ellipsis),
       trailing: starrable
           ? IconButton(
-              tooltip: starred ? 'Buang daripada kegemaran' : 'Tambah ke kegemaran',
-              icon: Icon(starred ? Icons.star_rounded : Icons.star_outline_rounded,
-                  color: starred ? const Color(0xFFF2A900) : AppColors.muted),
+              tooltip: starred
+                  ? S.of(context).removeFavorite
+                  : S.of(context).addFavorite,
+              icon: Icon(
+                starred ? Icons.star_rounded : Icons.star_outline_rounded,
+                color: starred ? const Color(0xFFF2A900) : AppColors.muted,
+              ),
               onPressed: () =>
                   ref.read(savedPlacesProvider.notifier).toggleFavorite(p),
             )
@@ -124,11 +138,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   Widget _header(String text) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 18, 16, 4),
-        child: Text(text,
-            style: const TextStyle(
-                fontWeight: FontWeight.w800, color: AppColors.muted, fontSize: 13)),
-      );
+    padding: const EdgeInsets.fromLTRB(16, 18, 16, 4),
+    child: Text(
+      text,
+      style: const TextStyle(
+        fontWeight: FontWeight.w800,
+        color: AppColors.muted,
+        fontSize: 13,
+      ),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -150,14 +169,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               textInputAction: TextInputAction.search,
               style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
               decoration: InputDecoration(
-                hintText: 'Cari alamat atau tempat',
+                hintText: S.of(context).searchHint,
                 prefixIcon: const Icon(Icons.search_rounded),
                 suffixIcon: _loading
                     ? const Padding(
                         padding: EdgeInsets.all(14),
                         child: SizedBox(
-                            height: 20, width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2.5)),
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2.5),
+                        ),
                       )
                     : null,
               ),
@@ -170,56 +191,75 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           if (_error != null)
             Padding(
               padding: const EdgeInsets.all(24),
-              child: Text(_error!, style: const TextStyle(color: AppColors.danger)),
+              child: Text(
+                S.of(context).searchFailed,
+                style: const TextStyle(color: AppColors.danger),
+              ),
             )
           else if (browsing) ...[
             if (isDestination) ...[
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: Row(children: [
-                  Expanded(
-                    child: _HomeWorkCard(
-                      icon: Icons.home_rounded,
-                      label: 'Rumah',
-                      place: saved.home,
-                      onSet: () => Navigator.of(context).pushReplacement(MaterialPageRoute(
-                          builder: (_) => const SearchScreen(purpose: SearchPurpose.home))),
-                      onGo: _pick,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _HomeWorkCard(
+                        icon: Icons.home_rounded,
+                        label: S.of(context).home,
+                        place: saved.home,
+                        onSet: () => Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                const SearchScreen(purpose: SearchPurpose.home),
+                          ),
+                        ),
+                        onGo: _pick,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _HomeWorkCard(
-                      icon: Icons.work_rounded,
-                      label: 'Kerja',
-                      place: saved.work,
-                      onSet: () => Navigator.of(context).pushReplacement(MaterialPageRoute(
-                          builder: (_) => const SearchScreen(purpose: SearchPurpose.work))),
-                      onGo: _pick,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _HomeWorkCard(
+                        icon: Icons.work_rounded,
+                        label: S.of(context).work,
+                        place: saved.work,
+                        onSet: () => Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                const SearchScreen(purpose: SearchPurpose.work),
+                          ),
+                        ),
+                        onGo: _pick,
+                      ),
                     ),
-                  ),
-                ]),
+                  ],
+                ),
               ),
               if (saved.favorites.isNotEmpty) ...[
-                _header('KEGEMARAN'),
-                for (final f in saved.favorites) _tile(f, icon: Icons.star_rounded, starrable: true),
+                _header(S.of(context).favoritesHeader),
+                for (final f in saved.favorites)
+                  _tile(f, icon: Icons.star_rounded, starrable: true),
               ],
             ],
             if (recents.isNotEmpty) ...[
-              _header('TERBARU'),
-              for (final r in recents) _tile(r, icon: Icons.history_rounded, starrable: isDestination),
+              _header(S.of(context).recentHeader),
+              for (final r in recents)
+                _tile(r, icon: Icons.history_rounded, starrable: isDestination),
             ] else if (saved.favorites.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(28),
-                child: Text('Taip nama tempat, jalan atau alamat untuk bermula.',
-                    style: TextStyle(color: AppColors.muted, fontSize: 15)),
+              Padding(
+                padding: const EdgeInsets.all(28),
+                child: Text(
+                  S.of(context).searchEmpty,
+                  style: const TextStyle(color: AppColors.muted, fontSize: 15),
+                ),
               ),
           ] else if (_results.isEmpty && !_loading)
-            const Padding(
-              padding: EdgeInsets.all(32),
+            Padding(
+              padding: const EdgeInsets.all(32),
               child: Center(
-                child: Text('Tiada hasil dijumpai',
-                    style: TextStyle(color: AppColors.muted, fontSize: 15)),
+                child: Text(
+                  S.of(context).noResults,
+                  style: const TextStyle(color: AppColors.muted, fontSize: 15),
+                ),
               ),
             )
           else
@@ -257,17 +297,30 @@ class _HomeWorkCard extends StatelessWidget {
         onLongPress: onSet,
         child: Padding(
           padding: const EdgeInsets.all(14),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Icon(icon, color: AppColors.brandDeep, size: 30),
-            const SizedBox(height: 10),
-            Text(label, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
-            Text(p?.name ?? 'Tekan untuk tetapkan',
-                maxLines: 1, overflow: TextOverflow.ellipsis,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, color: AppColors.brandDeep, size: 30),
+              const SizedBox(height: 10),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 17,
+                ),
+              ),
+              Text(
+                p?.name ?? S.of(context).tapToSet,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                    color: p == null ? AppColors.brandDeep : AppColors.muted,
-                    fontWeight: p == null ? FontWeight.w700 : FontWeight.w500,
-                    fontSize: 13)),
-          ]),
+                  color: p == null ? AppColors.brandDeep : AppColors.muted,
+                  fontWeight: p == null ? FontWeight.w700 : FontWeight.w500,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

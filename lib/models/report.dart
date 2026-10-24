@@ -1,47 +1,52 @@
 import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
-/// One refinement of a report type, e.g. police: "Tersembunyi".
+import '../app/strings.dart';
+
+/// One refinement of a report type, e.g. police: "Hidden". [label] is English;
+/// [localLabel] gives the label in the app language.
 /// [key] is what the API stores; the first subtype of a type is the default.
 class ReportSubtype {
   const ReportSubtype(this.key, this.label);
   final String key;
   final String label;
+
+  String localLabel(S s) => s.reportSubtype(key, label);
 }
 
 /// The kinds of report a driver can make. [name] and each subtype key must match
 /// the API (`reportSubtypes` in backend/main.go, documented in docs/API.md).
 enum ReportType {
-  police('Polis', Icons.local_police, Color(0xFF3F51B5), [
-    ReportSubtype('visible', 'Kelihatan'),
-    ReportSubtype('hidden', 'Tersembunyi'),
-    ReportSubtype('other_side', 'Di sebelah lain'),
+  police('Police', Icons.local_police, Color(0xFF3F51B5), [
+    ReportSubtype('visible', 'Visible'),
+    ReportSubtype('hidden', 'Hidden'),
+    ReportSubtype('other_side', 'Other side'),
   ]),
-  jam('Kesesakan', Icons.traffic, Color(0xFFF57C00), [
-    ReportSubtype('moderate', 'Sederhana'),
-    ReportSubtype('heavy', 'Teruk'),
-    ReportSubtype('standstill', 'Terhenti'),
+  jam('Traffic jam', Icons.traffic, Color(0xFFF57C00), [
+    ReportSubtype('moderate', 'Moderate'),
+    ReportSubtype('heavy', 'Heavy'),
+    ReportSubtype('standstill', 'Standstill'),
   ]),
-  accident('Kemalangan', Icons.car_crash, Color(0xFFE5484D), [
-    ReportSubtype('minor', 'Kecil'),
-    ReportSubtype('major', 'Besar'),
-    ReportSubtype('other_side', 'Di sebelah lain'),
+  accident('Accident', Icons.car_crash, Color(0xFFE5484D), [
+    ReportSubtype('minor', 'Minor'),
+    ReportSubtype('major', 'Major'),
+    ReportSubtype('other_side', 'Other side'),
   ]),
-  hazard('Bahaya', Icons.warning_amber_rounded, Color(0xFFF2A900), [
-    ReportSubtype('object', 'Objek di jalan'),
-    ReportSubtype('pothole', 'Lubang'),
-    ReportSubtype('stopped_vehicle', 'Kenderaan rosak'),
-    ReportSubtype('construction', 'Kerja jalan'),
-    ReportSubtype('broken_light', 'Lampu isyarat rosak'),
-    ReportSubtype('weather', 'Cuaca buruk'),
+  hazard('Hazard', Icons.warning_amber_rounded, Color(0xFFF2A900), [
+    ReportSubtype('object', 'Object on road'),
+    ReportSubtype('pothole', 'Pothole'),
+    ReportSubtype('stopped_vehicle', 'Stopped vehicle'),
+    ReportSubtype('construction', 'Roadwork'),
+    ReportSubtype('broken_light', 'Broken traffic light'),
+    ReportSubtype('weather', 'Bad weather'),
   ]),
-  camera('Kamera', Icons.videocam, Color(0xFF8E44AD), [
-    ReportSubtype('speed', 'Kamera kelajuan'),
-    ReportSubtype('red_light', 'Kamera lampu merah'),
+  camera('Camera', Icons.videocam, Color(0xFF8E44AD), [
+    ReportSubtype('speed', 'Speed camera'),
+    ReportSubtype('red_light', 'Red-light camera'),
   ]),
-  closed('Jalan tutup', Icons.block, Color(0xFF37474F), [
-    ReportSubtype('road', 'Jalan ditutup'),
-    ReportSubtype('lane', 'Lorong ditutup'),
+  closed('Road closed', Icons.block, Color(0xFF37474F), [
+    ReportSubtype('road', 'Road closed'),
+    ReportSubtype('lane', 'Lane closed'),
   ]);
 
   const ReportType(this.label, this.icon, this.color, this.subtypes);
@@ -50,10 +55,12 @@ enum ReportType {
   final Color color;
   final List<ReportSubtype> subtypes;
 
-  /// Label for a stored subtype key, or null if unknown.
-  String? subtypeLabel(String? key) {
-    for (final s in subtypes) {
-      if (s.key == key) return s.label;
+  String localLabel(S s) => s.reportType(name, label);
+
+  /// Label for a stored subtype key in the app language, or null if unknown.
+  String? subtypeLabel(String? key, S s) {
+    for (final sub in subtypes) {
+      if (sub.key == key) return sub.localLabel(s);
     }
     return null;
   }
@@ -83,40 +90,36 @@ class Report {
 
   LatLng get pos => LatLng(lat, lng);
 
-  /// "Polis · Tersembunyi" or just "Polis".
-  String get title {
-    final sub = type.subtypeLabel(subtype);
-    return sub == null ? type.label : '${type.label} · $sub';
+  /// "Police · Hidden" or just "Police".
+  String title(S s) {
+    final sub = type.subtypeLabel(subtype, s);
+    final t = type.localLabel(s);
+    return sub == null ? t : '$t · $sub';
   }
 
-  /// How the voice says it: "Polis tersembunyi", "Kamera kelajuan", "Bahaya lubang".
-  String get spokenName {
-    final sub = type.subtypeLabel(subtype);
-    if (sub == null) return type.label;
-    // "Kamera kelajuan" already starts with the type: do not say "Kamera kamera kelajuan".
-    if (sub.toLowerCase().startsWith(type.label.toLowerCase())) return sub;
-    return '${type.label} ${sub.toLowerCase()}';
-  }
+  /// How the voice says it, e.g. "Police, hidden" or "Speed camera".
+  String spokenName(S s) =>
+      s.reportSpoken(type.localLabel(s), type.subtypeLabel(subtype, s));
 
   Report copyWith({int? up, int? down}) => Report(
-        type,
-        lat,
-        lng,
-        id: id,
-        subtype: subtype,
-        up: up ?? this.up,
-        down: down ?? this.down,
-        mine: mine,
-      );
+    type,
+    lat,
+    lng,
+    id: id,
+    subtype: subtype,
+    up: up ?? this.up,
+    down: down ?? this.down,
+    mine: mine,
+  );
 
   static Report fromJson(Map<String, dynamic> j) => Report(
-        ReportType.values.byName(j['type'] as String),
-        (j['lat'] as num).toDouble(),
-        (j['lng'] as num).toDouble(),
-        id: (j['id'] as num?)?.toInt() ?? 0,
-        subtype: j['subtype'] as String?,
-        up: (j['up'] as num?)?.toInt() ?? 0,
-        down: (j['down'] as num?)?.toInt() ?? 0,
-        mine: (j['mine'] as bool?) ?? false,
-      );
+    ReportType.values.byName(j['type'] as String),
+    (j['lat'] as num).toDouble(),
+    (j['lng'] as num).toDouble(),
+    id: (j['id'] as num?)?.toInt() ?? 0,
+    subtype: j['subtype'] as String?,
+    up: (j['up'] as num?)?.toInt() ?? 0,
+    down: (j['down'] as num?)?.toInt() ?? 0,
+    mine: (j['mine'] as bool?) ?? false,
+  );
 }

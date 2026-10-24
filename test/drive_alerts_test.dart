@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waze_revamp/app/strings.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:waze_revamp/models/geo.dart';
 import 'package:waze_revamp/models/report.dart';
@@ -12,6 +13,10 @@ import 'helpers.dart';
 Report reportAt(int id, double metres, {double north = 0, ReportType type = ReportType.police, String? subtype, bool mine = false}) =>
     Report(type, 3.0 + north / 110540, 101.0 + metres / 111320 * 1.0,
         id: id, subtype: subtype, mine: mine);
+
+// The planner speaks the language it is given; most expectations here are Malay.
+const ms = S(AppLang.ms);
+const en = S(AppLang.en);
 
 void main() {
   group('projectOnRoute', () {
@@ -136,7 +141,7 @@ void main() {
     });
 
     test('spokenName reads naturally in Malay', () {
-      String say(ReportType t, String? sub) => Report(t, 0, 0, subtype: sub).spokenName;
+      String say(ReportType t, String? sub) => Report(t, 0, 0, subtype: sub).spokenName(ms);
       expect(say(ReportType.police, 'hidden'), 'Polis tersembunyi');
       expect(say(ReportType.jam, 'standstill'), 'Kesesakan terhenti');
       expect(say(ReportType.hazard, 'pothole'), 'Bahaya lubang');
@@ -170,35 +175,35 @@ void main() {
     test('announces a report once, when it comes within 600 m, rounded to 50 m', () {
       final p = VoicePlanner();
       final r = reportAt(1, 940, type: ReportType.police, subtype: 'hidden');
-      expect(p.nextAlert(navAt(route, 100), [r]), isNull); // 840 m: too far
-      expect(p.nextAlert(navAt(route, 360), [r]), 'Polis tersembunyi di hadapan, 600 meter');
-      expect(p.nextAlert(navAt(route, 400), [r]), isNull); // already said
-      expect(p.nextAlert(navAt(route, 700), [r]), isNull);
+      expect(p.nextAlert(navAt(route, 100), [r], ms), isNull); // 840 m: too far
+      expect(p.nextAlert(navAt(route, 360), [r], ms), 'Polis tersembunyi di hadapan, 600 meter');
+      expect(p.nextAlert(navAt(route, 400), [r], ms), isNull); // already said
+      expect(p.nextAlert(navAt(route, 700), [r], ms), isNull);
     });
 
     test('skips reports that are not on our road or are already under our wheels', () {
       final p = VoicePlanner();
-      expect(p.nextAlert(navAt(route, 100), [reportAt(1, 400, north: 300)]), isNull);
-      expect(p.nextAlert(navAt(route, 395), [reportAt(2, 400)]), isNull); // 5 m away
+      expect(p.nextAlert(navAt(route, 100), [reportAt(1, 400, north: 300)], ms), isNull);
+      expect(p.nextAlert(navAt(route, 395), [reportAt(2, 400)], ms), isNull); // 5 m away
     });
 
     test('each report is announced separately, nearest first', () {
       final p = VoicePlanner();
       final near = reportAt(1, 300, type: ReportType.jam, subtype: 'heavy');
       final far = reportAt(2, 500, type: ReportType.hazard, subtype: 'pothole');
-      expect(p.nextAlert(navAt(route, 100), [far, near]), 'Kesesakan teruk di hadapan, 200 meter');
-      expect(p.nextAlert(navAt(route, 110), [far, near]), 'Bahaya lubang di hadapan, 400 meter');
-      expect(p.nextAlert(navAt(route, 120), [far, near]), isNull);
+      expect(p.nextAlert(navAt(route, 100), [far, near], ms), 'Kesesakan teruk di hadapan, 200 meter');
+      expect(p.nextAlert(navAt(route, 110), [far, near], ms), 'Bahaya lubang di hadapan, 400 meter');
+      expect(p.nextAlert(navAt(route, 120), [far, near], ms), isNull);
     });
 
     test('stays quiet while re-routing or after arriving, and reset forgets what it said', () {
       final p = VoicePlanner();
       final r = reportAt(1, 300);
-      expect(p.nextAlert(navAt(route, 100, rerouting: true), [r]), isNull);
-      expect(p.nextAlert(navAt(route, 100, arrived: true), [r]), isNull);
-      expect(p.nextAlert(navAt(route, 100), [r]), isNotNull);
+      expect(p.nextAlert(navAt(route, 100, rerouting: true), [r], ms), isNull);
+      expect(p.nextAlert(navAt(route, 100, arrived: true), [r], ms), isNull);
+      expect(p.nextAlert(navAt(route, 100), [r], ms), isNotNull);
       p.reset();
-      expect(p.nextAlert(navAt(route, 100), [r]), isNotNull);
+      expect(p.nextAlert(navAt(route, 100), [r], ms), isNotNull);
     });
   });
 
@@ -208,25 +213,25 @@ void main() {
 
     test('warns once, and again only after dropping back to the limit', () {
       final p = VoicePlanner();
-      expect(p.speeding(at(58), 5), isNull);
-      expect(p.speeding(at(70), 5), 'Anda melebihi had laju, 60 kilometer sejam');
-      expect(p.speeding(at(72), 5), isNull); // still speeding: do not nag
-      expect(p.speeding(at(62), 5), isNull); // below limit+5 but above the limit: not re-armed
-      expect(p.speeding(at(70), 5), isNull);
-      expect(p.speeding(at(55), 5), isNull); // back under the limit: re-armed
-      expect(p.speeding(at(70), 5), isNotNull);
+      expect(p.speeding(at(58), 5, ms), isNull);
+      expect(p.speeding(at(70), 5, ms), 'Anda melebihi had laju, 60 kilometer sejam');
+      expect(p.speeding(at(72), 5, ms), isNull); // still speeding: do not nag
+      expect(p.speeding(at(62), 5, ms), isNull); // below limit+5 but above the limit: not re-armed
+      expect(p.speeding(at(70), 5, ms), isNull);
+      expect(p.speeding(at(55), 5, ms), isNull); // back under the limit: re-armed
+      expect(p.speeding(at(70), 5, ms), isNotNull);
     });
 
     test('is silent when switched off, when the limit is unknown, or after arriving', () {
       final p = VoicePlanner();
-      expect(p.speeding(at(120), null), isNull);
-      expect(p.speeding(navAt(route, 1050, speedKmh: 120), 5), isNull);
-      expect(p.speeding(navAt(route, 100, speedKmh: 120, arrived: true), 5), isNull);
+      expect(p.speeding(at(120), null, ms), isNull);
+      expect(p.speeding(navAt(route, 1050, speedKmh: 120), 5, ms), isNull);
+      expect(p.speeding(navAt(route, 100, speedKmh: 120, arrived: true), 5, ms), isNull);
     });
 
     test('tolerance 0 warns as soon as the limit is passed', () {
       final p = VoicePlanner();
-      expect(p.speeding(at(61), 0), isNotNull);
+      expect(p.speeding(at(61), 0, ms), isNotNull);
     });
   });
 }

@@ -15,7 +15,7 @@ cd backend; docker run --rm -v "${PWD}:/src" -w /src golang:1.26-alpine sh -c "g
 
 ## Peraturan
 
-- Teks yang pengguna nampak dalam **Bahasa Melayu**. Komen kod dalam bahasa fail sedia ada (kebanyakan Inggeris), jelaskan *kenapa*.
+- Teks yang pengguna nampak ada dalam **English (lalai) dan Bahasa Melayu**, sebelah-menyebelah dalam `lib/app/strings.dart` (`S`). Jangan tulis teks UI terus dalam widget; guna `S.of(context)` (atau `S(lang)` tanpa context). Komen kod dalam bahasa fail sedia ada (kebanyakan Inggeris), jelaskan *kenapa*. Jangan jalankan `dart format` pada seluruh `lib/` (gaya fail sedia ada berbeza).
 - **Kontrak jenis laporan** wujud di tiga tempat dan mesti sama: `backend/main.go` (`reportSubtypes`),
   `lib/models/report.dart` (`ReportType`), `docs/API.md`. Ujian kedua-dua sisi menjaganya.
 - Semua panggilan HTTP dari app ada dalam `lib/services/api.dart`. Logik dalam `lib/state/`, bukan dalam widget.

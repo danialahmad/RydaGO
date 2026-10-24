@@ -1,3 +1,5 @@
+import '../../app/strings.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -39,7 +41,11 @@ class RoundMapButton extends StatelessWidget {
         child: SizedBox(
           width: size,
           height: size,
-          child: Icon(icon, color: foreground ?? scheme.onSurface, size: size * 0.5),
+          child: Icon(
+            icon,
+            color: foreground ?? scheme.onSurface,
+            size: size * 0.5,
+          ),
         ),
       ),
     );
@@ -54,13 +60,13 @@ class ReportButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => RoundMapButton(
-        icon: Icons.add_alert_rounded,
-        tooltip: 'Lapor',
-        size: 64,
-        background: AppColors.report,
-        foreground: Colors.white,
-        onPressed: onPressed,
-      );
+    icon: Icons.add_alert_rounded,
+    tooltip: S.of(context).reportShort,
+    size: 64,
+    background: AppColors.report,
+    foreground: Colors.white,
+    onPressed: onPressed,
+  );
 }
 
 /// Small pill that says why the blue dot is not on the user's real position
@@ -70,25 +76,24 @@ class LocStatusChip extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final s = S.of(context);
     final loc = ref.watch(userLocProvider);
     if (ref.watch(demoProvider)) {
-      return const _Pill(
+      return _Pill(
         icon: Icons.science_outlined,
-        text: 'Mod demo: lokasi dan pemanduan palsu',
+        text: s.demoBanner,
         tint: Color(0xFFFFF1CC),
       );
     }
     if (loc.isReal) return const SizedBox.shrink();
     return switch (loc.status) {
-      LocStatus.starting =>
-        const _Pill(icon: Icons.gps_not_fixed, text: 'Mencari lokasi anda...'),
-      LocStatus.denied => const _Pill(
-          icon: Icons.location_off,
-          text: 'Lokasi tak dibenarkan. Guna lokasi contoh (KLCC)'),
-      LocStatus.unavailable => const _Pill(
-          icon: Icons.location_off, text: 'GPS tak tersedia. Guna lokasi contoh (KLCC)'),
-      LocStatus.active =>
-        const _Pill(icon: Icons.gps_not_fixed, text: 'Menunggu isyarat GPS...'),
+      LocStatus.starting => _Pill(icon: Icons.gps_not_fixed, text: s.locating),
+      LocStatus.denied => _Pill(icon: Icons.location_off, text: s.locDenied),
+      LocStatus.unavailable => _Pill(
+        icon: Icons.location_off,
+        text: s.locUnavailable,
+      ),
+      LocStatus.active => _Pill(icon: Icons.gps_not_fixed, text: s.waitingGps),
     };
   }
 }
@@ -108,17 +113,27 @@ class _Pill extends StatelessWidget {
       borderRadius: BorderRadius.circular(18),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, size: 16, color: onTint ? AppColors.ink : AppColors.muted),
-          const SizedBox(width: 6),
-          Flexible(
-            child: Text(text,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: onTint ? AppColors.ink : AppColors.muted,
+            ),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                text,
                 style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: onTint ? AppColors.ink : null)),
-          ),
-        ]),
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: onTint ? AppColors.ink : null,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -132,27 +147,30 @@ class BottomPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Material(
-        color: Theme.of(context).colorScheme.surface,
-        elevation: 16,
-        shadowColor: Colors.black54,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        child: SafeArea(
-          top: false,
-          child: Padding(
-            padding: padding ?? const EdgeInsets.fromLTRB(16, 10, 16, 16),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Container(
-                width: 38,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).dividerTheme.color,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+    color: Theme.of(context).colorScheme.surface,
+    elevation: 16,
+    shadowColor: Colors.black54,
+    borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+    child: SafeArea(
+      top: false,
+      child: Padding(
+        padding: padding ?? const EdgeInsets.fromLTRB(16, 10, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 38,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).dividerTheme.color,
+                borderRadius: BorderRadius.circular(2),
               ),
-              child,
-            ]),
-          ),
+            ),
+            child,
+          ],
         ),
-      );
+      ),
+    ),
+  );
 }

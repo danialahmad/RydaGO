@@ -144,5 +144,5 @@ Ikut `docs/DESIGN.md`. Letak widget dalam `lib/ui/widgets/` (panel dalam peta) a
 - Dart: `flutter analyze` bersih. Fail kecil, satu tanggungjawab. `lib/models` tulen.
 - Go: `gofmt`, `go vet`, ralat dikendalikan, tiada rahsia dalam kod.
 - Komen menerangkan **kenapa**, bukan apa. Kod dan komen dalam bahasa yang sama dengan fail sedia ada
-  (komen Inggeris di kebanyakan fail, teks UI Melayu).
+  (komen Inggeris di kebanyakan fail, teks UI dalam `strings.dart`: English dan Melayu).
 - Commit kecil dan bermakna. Jangan commit `.env`, `data/`, `build/`.

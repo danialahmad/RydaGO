@@ -28,15 +28,18 @@ class AuthNotifier extends Notifier<Auth?> {
     }
   }
 
-  /// Returns an error message to show, or null on success.
-  Future<String?> submit({
+  /// Returns null on success, or the failure so the UI can word it in the app language.
+  Future<AuthFailure?> submit({
     required bool register,
     required String email,
     required String password,
   }) async {
     try {
       final (token, confirmedEmail) = await Api.authenticate(
-          register: register, email: email, password: password);
+        register: register,
+        email: email,
+        password: password,
+      );
       state = Auth(token, confirmedEmail);
       try {
         final p = await SharedPreferences.getInstance();
@@ -45,7 +48,7 @@ class AuthNotifier extends Notifier<Auth?> {
       } catch (_) {}
       return null;
     } on AuthFailure catch (e) {
-      return e.message;
+      return e;
     }
   }
 

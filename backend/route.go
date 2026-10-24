@@ -41,6 +41,7 @@ type limitRange struct {
 }
 
 type routeOut struct {
+	ID        string        `json:"id"` // stable: "fastest", "notoll", "shortest" (Label is translated)
 	Label     string        `json:"label"`
 	Note      string        `json:"note"`
 	Via       string        `json:"via,omitempty"` // the street the route follows for longest
@@ -49,52 +50,21 @@ type routeOut struct {
 	Points    [][2]float64  `json:"points"` // [lat, lng]
 	Maneuvers []maneuverOut `json:"maneuvers"`
 	Limits    []limitRange  `json:"limits"`
-}
-
-// maneuverPhrases are Malay phrases for Valhalla's maneuver types
-// (https://valhalla.github.io/valhalla/api/turn-by-turn/api-reference/).
-var maneuverPhrases = map[int]string{
-	1: "Mulakan perjalanan", 2: "Mulakan perjalanan", 3: "Mulakan perjalanan",
-	4: "Anda telah sampai", 5: "Anda telah sampai, di sebelah kanan",
-	6: "Anda telah sampai, di sebelah kiri",
-	7: "Teruskan", 8: "Teruskan",
-	9: "Belok sedikit ke kanan", 10: "Belok kanan", 11: "Belok tajam ke kanan",
-	12: "Pusing U ke kanan", 13: "Pusing U ke kiri",
-	14: "Belok tajam ke kiri", 15: "Belok kiri", 16: "Belok sedikit ke kiri",
-	17: "Teruskan ke ramp", 18: "Ambil ramp di kanan", 19: "Ambil ramp di kiri",
-	20: "Ambil jalan keluar di kanan", 21: "Ambil jalan keluar di kiri",
-	22: "Kekal lurus", 23: "Kekal di lorong kanan", 24: "Kekal di lorong kiri",
-	25: "Bergabung ke lebuh raya",
-	26: "Masuk bulatan", 27: "Keluar dari bulatan",
-}
-
-// maneuverText builds the instruction shown in the app, e.g. "Belok kanan ke Jalan Ampang".
-func maneuverText(typ int, streets []string, roundaboutExit int) string {
-	phrase, ok := maneuverPhrases[typ]
-	if !ok {
-		phrase = "Teruskan"
-	}
-	if typ == 26 && roundaboutExit > 0 {
-		phrase += ", ambil simpang ke-" + strconv.Itoa(roundaboutExit)
-	}
-	if typ >= 4 && typ <= 6 || len(streets) == 0 {
-		return phrase
-	}
-	switch typ {
-	case 1, 2, 3, 7, 8:
-		return phrase + " di " + streets[0]
-	}
-	return phrase + " menuju " + streets[0]
+	Toll      *tollOut      `json:"toll,omitempty"` // absent when the route has no toll road
 }
 
 // Each variant maps one of the app's route choices to a Valhalla costing.
 var routeVariants = []struct {
-	label, note string
+	id          string
+	label, note map[string]string // by language
 	opts        map[string]any
 }{
-	{"Terpantas", "Laluan terpantas", map[string]any{}},
-	{"Tanpa tol", "Elak tol", map[string]any{"use_tolls": 0.0}},
-	{"Jarak terpendek", "Jarak paling dekat", map[string]any{"shortest": true}},
+	{"fastest", map[string]string{langEN: "Fastest", langMS: "Terpantas"},
+		map[string]string{langEN: "Fastest route", langMS: "Laluan terpantas"}, map[string]any{}},
+	{"notoll", map[string]string{langEN: "No tolls", langMS: "Tanpa tol"},
+		map[string]string{langEN: "Avoids tolls", langMS: "Elak tol"}, map[string]any{"use_tolls": 0.0}},
+	{"shortest", map[string]string{langEN: "Shortest", langMS: "Jarak terpendek"},
+		map[string]string{langEN: "Shortest distance", langMS: "Jarak paling dekat"}, map[string]any{"shortest": true}},
 }
 
 func parseLatLng(s string) (lat, lng float64, ok bool) {
@@ -111,6 +81,7 @@ func parseLatLng(s string) (lat, lng float64, ok bool) {
 }
 
 func (s *server) route(w http.ResponseWriter, r *http.Request) {
+	lang := langFrom(r)
 	fromLat, fromLng, ok1 := parseLatLng(r.URL.Query().Get("from"))
 	toLat, toLng, ok2 := parseLatLng(r.URL.Query().Get("to"))
 	if !ok1 || !ok2 {
@@ -124,12 +95,12 @@ func (s *server) route(w http.ResponseWriter, r *http.Request) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			out, err := askValhalla(r.Context(), fromLat, fromLng, toLat, toLng, v.opts)
+			out, err := askValhalla(r.Context(), lang, fromLat, fromLng, toLat, toLng, v.opts)
 			if err != nil {
-				log.Printf("valhalla %s: %v", v.label, err)
+				log.Printf("valhalla %s: %v", v.id, err)
 				return
 			}
-			out.Label, out.Note = v.label, v.note
+			out.ID, out.Label, out.Note = v.id, v.label[lang], v.note[lang]
 			results[i] = out
 		}()
 	}
@@ -142,13 +113,13 @@ func (s *server) route(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if len(routes) == 0 {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "routing tidak tersedia"})
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "routing unavailable"})
 		return
 	}
 	writeJSON(w, http.StatusOK, routes)
 }
 
-func askValhalla(ctx context.Context, fromLat, fromLng, toLat, toLng float64, autoOpts map[string]any) (*routeOut, error) {
+func askValhalla(ctx context.Context, lang string, fromLat, fromLng, toLat, toLng float64, autoOpts map[string]any) (*routeOut, error) {
 	body, _ := json.Marshal(map[string]any{
 		"locations": []map[string]float64{
 			{"lat": fromLat, "lon": fromLng},
@@ -185,6 +156,7 @@ func askValhalla(ctx context.Context, fromLat, fromLng, toLat, toLng float64, au
 					BeginShapeIndex     int      `json:"begin_shape_index"`
 					StreetNames         []string `json:"street_names"`
 					RoundaboutExitCount int      `json:"roundabout_exit_count"`
+					Toll                bool     `json:"toll"`
 				} `json:"maneuvers"`
 			} `json:"legs"`
 		} `json:"trip"`
@@ -196,6 +168,7 @@ func askValhalla(ctx context.Context, fromLat, fromLng, toLat, toLng float64, au
 	maneuvers := []maneuverOut{}
 	limits := []limitRange{}
 	via, viaKm := "", 0.0
+	tollKm := 0.0
 	for _, leg := range v.Trip.Legs {
 		offset := len(pts) // maneuver indexes are relative to their own leg's shape
 		pts = append(pts, decodePolyline6(leg.Shape)...)
@@ -207,11 +180,14 @@ func askValhalla(ctx context.Context, fromLat, fromLng, toLat, toLng float64, au
 			if len(m.StreetNames) > 0 {
 				street = m.StreetNames[0]
 			}
+			if m.Toll {
+				tollKm += m.Length
+			}
 			if street != "" && m.Length > viaKm {
 				via, viaKm = street, m.Length
 			}
 			maneuvers = append(maneuvers, maneuverOut{
-				Text:   maneuverText(m.Type, m.StreetNames, m.RoundaboutExitCount),
+				Text:   maneuverText(lang, m.Type, m.StreetNames, m.RoundaboutExitCount),
 				Street: street,
 				Type:   m.Type,
 				Km:     m.Length,
@@ -229,6 +205,7 @@ func askValhalla(ctx context.Context, fromLat, fromLng, toLat, toLng float64, au
 		Maneuvers: maneuvers,
 		Via:       via,
 		Limits:    limits,
+		Toll:      tollFor(tollKm),
 	}, nil
 }
 

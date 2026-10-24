@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/strings.dart';
 import '../../state/demo.dart';
 import '../../state/trip.dart';
 import '../../state/user_loc.dart';
@@ -87,7 +88,7 @@ class MapScreen extends ConsumerWidget {
                       children: [
                         RoundMapButton(
                           icon: Icons.menu_rounded,
-                          tooltip: 'Menu dan tetapan',
+                          tooltip: S.of(context).menuTooltip,
                           onPressed: () => Navigator.of(context).push(
                               MaterialPageRoute(builder: (_) => const SettingsScreen())),
                         ),
@@ -110,7 +111,7 @@ class MapScreen extends ConsumerWidget {
                       if (!navigating) ...[
                         RoundMapButton(
                           icon: Icons.my_location_rounded,
-                          tooltip: 'Lokasi saya',
+                          tooltip: S.of(context).myLocation,
                           onPressed: () {
                             final loc = ref.read(userLocProvider);
                             if (!loc.isReal && !ref.read(demoProvider)) {

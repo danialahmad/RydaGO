@@ -59,7 +59,7 @@ Lajur "Perlu" menyebut apa yang perlu disediakan (backend, data, atau platform).
 | Banner belokan: ikon, jarak, nama jalan | ✅ | | `nav_overlay.dart` |
 | "Kemudian" (belokan kedua yang dekat) | ✅ | | Hanya bila dalam 500 m |
 | Panduan lorong | ⬜ | 2 | Valhalla ada data lorong dalam respons terperinci |
-| Arahan suara bahasa Melayu | 🟡 | | `flutter_tts`. Bergantung suara yang ada pada peranti/pelayar. Belum diuji pada telefon sebenar |
+| Arahan suara (English dan Melayu) | 🟡 | | `flutter_tts`, ikut bahasa dipilih. Bergantung suara yang ada pada peranti/pelayar (mungkin tiada suara Melayu). Belum diuji pada telefon sebenar |
 | Bar bawah: waktu tiba, baki masa dan jarak, "Melalui", kemajuan | ✅ | | Ketuk untuk kembangkan |
 | Speedometer | ✅ | | Dari GPS |
 | Tanda had laju | 🟡 | | Dari OSM `maxspeed` melalui Valhalla. Hanya ~1/3 jalan ada data; tanda hilang bila tak diketahui |
@@ -98,7 +98,9 @@ Waze ialah app komuniti; inilah ciri yang membezakannya.
 | Skrin Tetapan (akaun, tempat saya, navigasi, paparan, pembangun, tentang) | ✅ | | |
 | Segerak tempat simpanan antara peranti | ⬜ | 2 | Jadual `saved_places` di backend |
 | Tetapan amaran ikut jenis laporan | ⬜ | 2 | |
-| Unit (km / batu), bahasa lain | ⬜ | 3 | App kini bahasa Melayu sahaja |
+| Unit (km / batu) | ⬜ | 3 | |
+| Bahasa: English (lalai) dan Melayu, tukar dalam Tetapan | ✅ | | `lib/app/strings.dart`. Tambah bahasa baru = tambah nilai `AppLang` dan terjemahan dalam `S` |
+| Pengesanan tol dan anggaran harga | 🟡 | | Tol dikesan dari Valhalla (OSM). **Harga ialah anggaran** ~11 sen/km kelas 1, bukan kadar rasmi PLUS. Perlu jadual plaza-ke-plaza untuk harga tepat |
 | Padam akaun dan data | ⬜ | 1 | Diperlukan oleh kedai app dan PDPA |
 
 ## 7. Platform

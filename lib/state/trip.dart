@@ -7,6 +7,7 @@ import '../models/place.dart';
 import '../models/route.dart';
 import '../services/api.dart';
 import 'saved_places.dart';
+import 'settings.dart';
 import 'user_loc.dart';
 
 /// Where the user is going, once they picked a place. Null = just browsing the map.
@@ -17,8 +18,9 @@ class DestinationNotifier extends Notifier<Place?> {
   void set(Place? p) => state = p;
 }
 
-final destinationProvider =
-    NotifierProvider<DestinationNotifier, Place?>(DestinationNotifier.new);
+final destinationProvider = NotifierProvider<DestinationNotifier, Place?>(
+  DestinationNotifier.new,
+);
 
 /// Which of the offered routes is selected in the preview.
 class RouteIndexNotifier extends Notifier<int> {
@@ -28,15 +30,17 @@ class RouteIndexNotifier extends Notifier<int> {
   void set(int i) => state = i;
 }
 
-final routeIndexProvider =
-    NotifierProvider<RouteIndexNotifier, int>(RouteIndexNotifier.new);
+final routeIndexProvider = NotifierProvider<RouteIndexNotifier, int>(
+  RouteIndexNotifier.new,
+);
 
 /// Routes to the destination from where the user is now. Empty without one.
 final routesProvider = FutureProvider<List<RouteOption>>((ref) async {
   final dest = ref.watch(destinationProvider);
   if (dest == null) return const [];
   // read, not watch: GPS updates must not refetch the routes mid-trip.
-  return Api.routes(ref.read(userLocProvider).pos, dest.pos);
+  final lang = ref.watch(settingsProvider.select((s) => s.lang));
+  return Api.routes(ref.read(userLocProvider).pos, dest.pos, lang);
 });
 
 /// Keeps a stored index inside the list (a route type can be missing if the API
@@ -51,8 +55,9 @@ class NavigatingNotifier extends Notifier<bool> {
   void set(bool v) => state = v;
 }
 
-final navigatingProvider =
-    NotifierProvider<NavigatingNotifier, bool>(NavigatingNotifier.new);
+final navigatingProvider = NotifierProvider<NavigatingNotifier, bool>(
+  NavigatingNotifier.new,
+);
 
 /// A pin dropped with a long press. Also where the next report goes, if set.
 class PinNotifier extends Notifier<LatLng?> {

@@ -4,19 +4,21 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 class Maneuver {
   const Maneuver(this.text, this.type, this.km, this.index, {this.street = ''});
 
-  final String text; // full Malay instruction, also what the voice says
-  final String street; // street name only, shown large in the banner ('' if none)
+  final String
+  text; // full instruction in the app language, also what the voice says
+  final String
+  street; // street name only, shown large in the banner ('' if none)
   final int type; // Valhalla maneuver type, mapped to an icon in the UI
   final double km;
   final int index; // index into RouteOption.points where this step begins
 
   static Maneuver fromJson(Map<String, dynamic> j) => Maneuver(
-        j['text'] as String,
-        j['type'] as int,
-        (j['km'] as num).toDouble(),
-        j['index'] as int,
-        street: (j['street'] as String?) ?? '',
-      );
+    j['text'] as String,
+    j['type'] as int,
+    (j['km'] as num).toDouble(),
+    j['index'] as int,
+    street: (j['street'] as String?) ?? '',
+  );
 }
 
 /// The posted speed limit along route points [from]..[to]. Only stretches where
@@ -32,6 +34,21 @@ class SpeedLimit {
       SpeedLimit(j['from'] as int, j['to'] as int, j['kmh'] as int);
 }
 
+/// Toll roads on a route. [rm] is an estimate for a class 1 car, not an official rate.
+class Toll {
+  const Toll(this.km, this.rm, {this.estimate = true});
+
+  final double km; // length driven on toll roads
+  final double rm; // estimated total price in ringgit
+  final bool estimate;
+
+  static Toll fromJson(Map<String, dynamic> j) => Toll(
+    (j['km'] as num).toDouble(),
+    (j['rm'] as num).toDouble(),
+    estimate: (j['estimate'] as bool?) ?? true,
+  );
+}
+
 /// One way to get to the destination, as returned by `GET /route`.
 class RouteOption {
   const RouteOption(
@@ -43,9 +60,12 @@ class RouteOption {
     this.maneuvers, {
     this.via = '',
     this.limits = const [],
+    this.id = '',
+    this.toll,
   });
 
-  final String label; // "Terpantas", "Tanpa tol", "Jarak terpendek"
+  final String id; // stable across languages: "fastest", "notoll", "shortest"
+  final String label; // translated name of the route type
   final int minutes;
   final double km;
   final String note;
@@ -53,24 +73,29 @@ class RouteOption {
   final List<LatLng> points;
   final List<Maneuver> maneuvers;
   final List<SpeedLimit> limits; // sorted by [SpeedLimit.from]
+  final Toll? toll; // null when the route uses no toll road
 
   static RouteOption fromJson(Map<String, dynamic> j) => RouteOption(
-        j['label'] as String,
-        j['minutes'] as int,
-        (j['km'] as num).toDouble(),
-        j['note'] as String,
-        [
-          for (final p in j['points'] as List)
-            LatLng((p[0] as num).toDouble(), (p[1] as num).toDouble()),
-        ],
-        [
-          for (final m in j['maneuvers'] as List)
-            Maneuver.fromJson(m as Map<String, dynamic>),
-        ],
-        via: (j['via'] as String?) ?? '',
-        limits: [
-          for (final l in (j['limits'] as List? ?? const []))
-            SpeedLimit.fromJson(l as Map<String, dynamic>),
-        ],
-      );
+    j['label'] as String,
+    j['minutes'] as int,
+    (j['km'] as num).toDouble(),
+    j['note'] as String,
+    [
+      for (final p in j['points'] as List)
+        LatLng((p[0] as num).toDouble(), (p[1] as num).toDouble()),
+    ],
+    [
+      for (final m in j['maneuvers'] as List)
+        Maneuver.fromJson(m as Map<String, dynamic>),
+    ],
+    id: (j['id'] as String?) ?? '',
+    toll: j['toll'] == null
+        ? null
+        : Toll.fromJson(j['toll'] as Map<String, dynamic>),
+    via: (j['via'] as String?) ?? '',
+    limits: [
+      for (final l in (j['limits'] as List? ?? const []))
+        SpeedLimit.fromJson(l as Map<String, dynamic>),
+    ],
+  );
 }

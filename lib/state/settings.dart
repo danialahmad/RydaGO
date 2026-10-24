@@ -1,17 +1,25 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../app/strings.dart';
+
 enum ThemeChoice { auto, light, dark }
 
 /// When to warn about driving over the speed limit.
 enum SpeedAlert {
-  off('Mati', null),
-  atLimit('Tepat had', 0),
-  plus5('+5 km/j', 5),
-  plus10('+10 km/j', 10);
+  off(null),
+  atLimit(0),
+  plus5(5),
+  plus10(10);
 
-  const SpeedAlert(this.label, this.toleranceKmh);
-  final String label;
+  const SpeedAlert(this.toleranceKmh);
+
+  String label(S s) => switch (this) {
+    off => s.alertOff,
+    atLimit => s.alertAtLimit,
+    plus5 => s.alertPlus(5),
+    plus10 => s.alertPlus(10),
+  };
 
   /// Warn once speed exceeds the limit by more than this. Null = never warn.
   final int? toleranceKmh;
@@ -24,25 +32,29 @@ class AppSettings {
     this.voiceOn = true,
     this.avoidTolls = false,
     this.speedAlert = SpeedAlert.plus5,
+    this.lang = AppLang.en,
   });
 
   final ThemeChoice theme;
   final bool voiceOn; // spoken turn-by-turn instructions
   final bool avoidTolls; // start with the "Tanpa tol" route selected
-  final SpeedAlert speedAlert; // red speedometer and a spoken warning over the limit
+  final SpeedAlert
+  speedAlert; // red speedometer and a spoken warning over the limit
+  final AppLang lang; // language of the UI, voice and route directions
 
   AppSettings copyWith({
     ThemeChoice? theme,
     bool? voiceOn,
     bool? avoidTolls,
     SpeedAlert? speedAlert,
-  }) =>
-      AppSettings(
-        theme: theme ?? this.theme,
-        voiceOn: voiceOn ?? this.voiceOn,
-        avoidTolls: avoidTolls ?? this.avoidTolls,
-        speedAlert: speedAlert ?? this.speedAlert,
-      );
+    AppLang? lang,
+  }) => AppSettings(
+    theme: theme ?? this.theme,
+    voiceOn: voiceOn ?? this.voiceOn,
+    avoidTolls: avoidTolls ?? this.avoidTolls,
+    speedAlert: speedAlert ?? this.speedAlert,
+    lang: lang ?? this.lang,
+  );
 }
 
 class SettingsNotifier extends Notifier<AppSettings> {
@@ -66,6 +78,10 @@ class SettingsNotifier extends Notifier<AppSettings> {
           (a) => a.name == p.getString('speedAlert'),
           orElse: () => SpeedAlert.plus5,
         ),
+        lang: AppLang.values.firstWhere(
+          (l) => l.code == p.getString('lang'),
+          orElse: () => AppLang.en,
+        ),
       );
     } catch (_) {
       // Defaults are fine if storage is unavailable.
@@ -79,7 +95,13 @@ class SettingsNotifier extends Notifier<AppSettings> {
       await p.setBool('voiceOn', state.voiceOn);
       await p.setBool('avoidTolls', state.avoidTolls);
       await p.setString('speedAlert', state.speedAlert.name);
+      await p.setString('lang', state.lang.code);
     } catch (_) {}
+  }
+
+  void setLang(AppLang l) {
+    state = state.copyWith(lang: l);
+    _save();
   }
 
   void setSpeedAlert(SpeedAlert a) {
@@ -103,5 +125,6 @@ class SettingsNotifier extends Notifier<AppSettings> {
   }
 }
 
-final settingsProvider =
-    NotifierProvider<SettingsNotifier, AppSettings>(SettingsNotifier.new);
+final settingsProvider = NotifierProvider<SettingsNotifier, AppSettings>(
+  SettingsNotifier.new,
+);

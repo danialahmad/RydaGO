@@ -1,6 +1,6 @@
 # Waze Revamp
 
-App navigasi komuniti untuk Malaysia: laluan sebenar, arahan belok demi belok dalam Bahasa Melayu,
+App navigasi komuniti untuk Malaysia: laluan sebenar, arahan belok demi belok dalam English (lalai) atau Bahasa Melayu,
 dan laporan jalan raya oleh pemandu (polis, kesesakan, kemalangan, bahaya, kamera, jalan tutup).
 
 Semua dijalankan sendiri dengan data [OpenStreetMap](https://www.openstreetmap.org): tiada kunci API
