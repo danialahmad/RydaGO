@@ -87,8 +87,8 @@ Pada Chrome desktop, DevTools > Sensors membolehkan menetapkan lokasi sendiri.
 
 ## Mod demo
 
-Tetapan > Pembangun > **Mod demo pemanduan**. Lokasi palsu bergerak di sepanjang laluan 10x lebih laju
-dan melalui saluran GPS yang sama (lihat `docs/ARCHITECTURE.md`). Dalam navigasi, kembangkan bar bawah:
+Tetapan > Pembangun > **Mod demo pemanduan**. Lokasi palsu bergerak di sepanjang laluan pada ~50 km/j
+masa sebenar (laju yang dipercepat membuatkan suara bertindih dan kamera melompat) dan melalui saluran GPS yang sama (lihat `docs/ARCHITECTURE.md`). Dalam navigasi, kembangkan bar bawah:
 butang **Lencong (demo)** melompatkan kedudukan ~270 m dari laluan untuk menunjukkan re-route.
 Berguna untuk demonstrasi dan untuk menguji UI navigasi tanpa memandu.
 

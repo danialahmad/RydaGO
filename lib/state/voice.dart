@@ -25,7 +25,8 @@ class VoiceGuide extends Notifier<void> {
       }
       final settings = ref.read(settingsProvider);
       final strings = S(settings.lang);
-      // One sentence per update: speak() interrupts, so never queue two.
+      // One sentence per update. The planners only mark what they return as
+      // said, so a report or speeding warning held back here comes on a later fix.
       final text =
           _planner.next(next, strings) ??
           _planner.nextAlert(next, ref.read(reportsProvider), strings) ??

@@ -49,7 +49,8 @@ void main() {
   group('VoicePlanner', () {
     test('announces each turn once from far away and once when close', () {
       final r = straightRoute();
-      final p = VoicePlanner();
+      var now = DateTime(2026, 1, 1, 8);
+      final p = VoicePlanner(clock: () => now);
       // At the very start the first maneuver is "close": say it.
       expect(p.next(navAt(r, 0), ms), 'Mulakan perjalanan di Jalan A');
       expect(p.next(navAt(r, 5), ms), isNull); // nothing new
@@ -57,8 +58,48 @@ void main() {
       expect(p.next(navAt(r, 100), ms), 'Dalam 450 meter, belok kanan menuju Jalan B');
       expect(p.next(navAt(r, 150), ms), isNull); // already said
       // Within 150 m: the short form.
+      now = now.add(const Duration(seconds: 25));
       expect(p.next(navAt(r, 450), ms), 'Belok kanan menuju Jalan B');
       expect(p.next(navAt(r, 500), ms), isNull);
+    });
+
+    test('skips the close announcement right after the far one', () {
+      final r = straightRoute();
+      var now = DateTime(2026, 1, 1, 8);
+      final p = VoicePlanner(clock: () => now);
+      p.next(navAt(r, 0), ms);
+      expect(p.next(navAt(r, 300), ms), 'Dalam 250 meter, belok kanan menuju Jalan B');
+      now = now.add(const Duration(seconds: 3));
+      expect(p.next(navAt(r, 450), ms), isNull);
+      expect(p.next(navAt(r, 500), ms), isNull);
+    });
+
+    test('a fix jittering back before a turn does not repeat it', () {
+      final base = straightRoute();
+      final r = RouteOption(base.label, base.minutes, base.km, base.note, base.points, const [
+        Maneuver('Mulakan perjalanan di Jalan A', 1, 0.55, 0),
+        Maneuver('Belok kanan menuju Jalan B', 10, 0.33, 5),
+        Maneuver('Belok kiri menuju Jalan C', 15, 0.22, 8),
+        Maneuver('Anda telah sampai', 4, 0, 10),
+      ]);
+      final p = VoicePlanner();
+      p.next(navAt(r, 0), ms);
+      expect(p.next(navAt(r, 450), ms), 'Belok kanan menuju Jalan B');
+      // Past the turn: the next one is announced from afar.
+      expect(p.next(navAt(r, 560), ms), 'Dalam 350 meter, belok kiri menuju Jalan C');
+      expect(p.next(navAt(r, 550), ms), isNull); // GPS puts us back before the first
+      expect(p.next(navAt(r, 570), ms), isNull);
+    });
+
+    test('a new route announces its maneuvers afresh', () {
+      final p = VoicePlanner();
+      final first = straightRoute();
+      p.next(navAt(first, 0), ms);
+      expect(p.next(navAt(first, 450), ms), 'Belok kanan menuju Jalan B');
+      // Re-routed onto a new route whose maneuver 1 is the same turn.
+      final r = straightRoute();
+      expect(p.next(navAt(r, 0, rerouting: true), ms), 'Mengira semula laluan');
+      expect(p.next(navAt(r, 450), ms), 'Belok kanan menuju Jalan B');
     });
 
     test('says nothing about the arrival maneuver itself, only the arrival', () {

@@ -9,6 +9,7 @@ import '../../state/voice.dart';
 import '../map/map_view.dart';
 import '../widgets/home_panel.dart';
 import '../widgets/map_buttons.dart';
+import '../widgets/measure_size.dart';
 import '../widgets/nav_overlay.dart';
 import '../widgets/pin_panel.dart';
 import '../widgets/report_sheet.dart';
@@ -127,12 +128,16 @@ class MapScreen extends ConsumerWidget {
                     ]),
                   ]),
                 ),
-                AnimatedSize(
-                  duration: const Duration(milliseconds: 200),
-                  alignment: Alignment.bottomCenter,
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 180),
-                    child: panel,
+                MeasureSize(
+                  onChange: (size) =>
+                      ref.read(mapBottomInsetProvider.notifier).set(size.height),
+                  child: AnimatedSize(
+                    duration: const Duration(milliseconds: 200),
+                    alignment: Alignment.bottomCenter,
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 180),
+                      child: panel,
+                    ),
                   ),
                 ),
               ]),

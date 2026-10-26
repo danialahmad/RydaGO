@@ -10,8 +10,11 @@ import 'navigation.dart';
 import 'user_loc.dart';
 
 // Demo mode: drive the route without moving, through the normal GPS pipeline.
-const kDemoSpeedMps = 50 / 3.6; // reported speed (~50 km/h)
-const kDemoSpeedUp = 10.0; // how much faster than real time the demo moves
+// Real time: sped up, voice prompts overlapped and the camera jumped, so the
+// demo stopped showing what a drive is like.
+const kDemoSpeedMps = 50 / 3.6; // ~50 km/h, both reported and actually moved
+// More often than a real GPS (about 1/s) so the camera glides instead of stepping.
+const kDemoTick = Duration(milliseconds: 250);
 
 class DemoNotifier extends Notifier<bool> {
   @override
@@ -43,7 +46,7 @@ class DemoDriver extends Notifier<void> {
       if (nav == null) {
         _stop();
       } else if (ref.read(demoProvider) && _timer == null) {
-        _timer = Timer.periodic(const Duration(milliseconds: 500), (_) => _tick());
+        _timer = Timer.periodic(kDemoTick, (_) => _tick());
       }
     });
     ref.listen(demoProvider, (_, on) {
@@ -86,7 +89,8 @@ class DemoDriver extends Notifier<void> {
     }
 
     final pts = nav.route.points;
-    _along = math.min(_cum.last, _along + kDemoSpeedMps * 0.5 * kDemoSpeedUp);
+    _along = math.min(_cum.last,
+        _along + kDemoSpeedMps * kDemoTick.inMilliseconds / 1000);
     var i = 1;
     while (i < _cum.length - 1 && _cum[i] < _along) {
       i++;
