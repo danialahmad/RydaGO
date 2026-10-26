@@ -31,6 +31,7 @@ class AppSettings {
     this.theme = ThemeChoice.auto,
     this.voiceOn = true,
     this.avoidTolls = false,
+    this.avoidHighways = false,
     this.speedAlert = SpeedAlert.plus5,
     this.lang = AppLang.en,
   });
@@ -38,6 +39,7 @@ class AppSettings {
   final ThemeChoice theme;
   final bool voiceOn; // spoken turn-by-turn instructions
   final bool avoidTolls; // start with the "Tanpa tol" route selected
+  final bool avoidHighways; // route around expressways, e.g. for a slow, scenic drive
   final SpeedAlert
   speedAlert; // red speedometer and a spoken warning over the limit
   final AppLang lang; // language of the UI, voice and route directions
@@ -46,12 +48,14 @@ class AppSettings {
     ThemeChoice? theme,
     bool? voiceOn,
     bool? avoidTolls,
+    bool? avoidHighways,
     SpeedAlert? speedAlert,
     AppLang? lang,
   }) => AppSettings(
     theme: theme ?? this.theme,
     voiceOn: voiceOn ?? this.voiceOn,
     avoidTolls: avoidTolls ?? this.avoidTolls,
+    avoidHighways: avoidHighways ?? this.avoidHighways,
     speedAlert: speedAlert ?? this.speedAlert,
     lang: lang ?? this.lang,
   );
@@ -74,6 +78,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
         ),
         voiceOn: p.getBool('voiceOn') ?? true,
         avoidTolls: p.getBool('avoidTolls') ?? false,
+        avoidHighways: p.getBool('avoidHighways') ?? false,
         speedAlert: SpeedAlert.values.firstWhere(
           (a) => a.name == p.getString('speedAlert'),
           orElse: () => SpeedAlert.plus5,
@@ -94,6 +99,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
       await p.setString('theme', state.theme.name);
       await p.setBool('voiceOn', state.voiceOn);
       await p.setBool('avoidTolls', state.avoidTolls);
+      await p.setBool('avoidHighways', state.avoidHighways);
       await p.setString('speedAlert', state.speedAlert.name);
       await p.setString('lang', state.lang.code);
     } catch (_) {}
@@ -121,6 +127,11 @@ class SettingsNotifier extends Notifier<AppSettings> {
 
   void setAvoidTolls(bool on) {
     state = state.copyWith(avoidTolls: on);
+    _save();
+  }
+
+  void setAvoidHighways(bool on) {
+    state = state.copyWith(avoidHighways: on);
     _save();
   }
 }

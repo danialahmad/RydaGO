@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -56,6 +57,7 @@ class _MapViewState extends ConsumerState<MapView> {
   String _reportsKey = ''; // what the drawn report markers show
   bool _centeredOnFix = false;
   double _bearing = 0;
+  double _zoom = kNavZoom; // current driving zoom, eased by speed
   String? _initialStyle;
   String? _lightStyle; // flattened style JSON, or the plain URL if it could not be fetched
   String? _darkStyle;
@@ -73,7 +75,7 @@ class _MapViewState extends ConsumerState<MapView> {
   }
 
   Future<void> _loadStyles() async {
-    final both = await Future.wait([loadFlatStyle(kMapStyleLight), loadFlatStyle(kMapStyleDark)]);
+    final both = await Future.wait([loadFlatStyle(kMapStyleLight, recolor: true), loadFlatStyle(kMapStyleDark)]);
     if (!mounted) return;
     setState(() {
       _lightStyle = both[0] ?? kMapStyleLight;
@@ -256,10 +258,14 @@ class _MapViewState extends ConsumerState<MapView> {
     final c = _controller;
     if (c == null) return;
     if ((n.speedKmh ?? 0) > 5 && n.heading != null) _bearing = n.heading!;
+    // Ease towards the zoom for this speed, so tile levels do not flicker.
+    _zoom += (navZoom(n.speedKmh, n.distToUpcomingM) - _zoom).clamp(-0.1, 0.1);
+    // Keep the dot at the same place on screen whatever the zoom.
+    final aheadM = kNavAheadM * math.pow(2, kNavZoom - _zoom);
     final camera = CameraUpdate.newCameraPosition(
         CameraPosition(
-            target: offsetAhead(n.pos, _bearing, kNavAheadM),
-            zoom: kNavZoom,
+            target: offsetAhead(n.pos, _bearing, aheadM),
+            zoom: _zoom,
             bearing: _bearing,
             tilt: kNavTilt));
     try {
@@ -388,6 +394,7 @@ class _MapViewState extends ConsumerState<MapView> {
     ref.listen(navigatingProvider, (_, nav) {
       _sync();
       if (nav) {
+        _zoom = kNavZoom;
         _controller?.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(
             target: offsetAhead(_userPos, _bearing, kNavAheadM),
             zoom: kNavZoom,

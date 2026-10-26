@@ -120,6 +120,8 @@ class S {
   String get tagFastest => _t('Fastest', 'Terpantas');
   String get tagSame => _t('Same speed', 'Sama laju');
   String tagSlower(int min) => '+$min min';
+  String get onThisRoute => _t('On this route', 'Di laluan ini');
+  String get nothingReported => _t('No reports on this route right now', 'Tiada laporan di laluan ini sekarang');
   String get noToll => _t('No toll', 'Tiada tol');
   String tollEstimate(String rm) => _t('Toll ≈ RM$rm', 'Tol ≈ RM$rm');
   String tollDetail(String km, String rm) => _t(
@@ -132,6 +134,7 @@ class S {
   );
 
   // ---- navigation ----
+  String exitLabel(String number) => _t('Exit $number', 'Keluar $number');
   String get recalculating =>
       _t('Recalculating...', 'Mengira semula laluan...');
   String get arrived => _t('You have arrived', 'Anda telah sampai');
@@ -148,6 +151,11 @@ class S {
     "I'll arrive at $dest at $time.",
     'Saya akan sampai di $dest pada $time.',
   );
+  String get shareLive => _t('Share live trip', 'Kongsi perjalanan langsung');
+  String get stopSharing => _t('Stop sharing', 'Henti kongsi');
+  String liveCopied(String link) => _t('Live link copied: friends can follow your trip. $link', 'Pautan langsung disalin: kawan boleh ikut perjalanan anda. $link');
+  String get liveFailed => _t('Could not start sharing. Check your connection.', 'Tak dapat mula berkongsi. Semak sambungan anda.');
+  String liveText(String dest, String link) => _t('Follow my trip to $dest live: $link', 'Ikuti perjalanan saya ke $dest secara langsung: $link');
   String get etaCopied =>
       _t('ETA copied. Paste it to share.', 'ETA disalin. Tampal untuk kongsi.');
 
@@ -169,6 +177,8 @@ class S {
     'Could not send the report. The server is unreachable.',
     'Gagal hantar laporan. Server tak dapat dihubungi.',
   );
+  String get reportDuplicate => _t('You already reported this here.', 'Anda sudah melaporkan ini di sini.');
+  String get reportRateLimited => _t('Slow down: too many reports in a short time.', 'Perlahan sikit: terlalu banyak laporan dalam masa singkat.');
   String stillThere(String name) =>
       _t('$name still there?', '$name masih ada?');
   String get yes => _t('Yes', 'Ya');
@@ -294,6 +304,17 @@ class S {
   }
 
   // ---- settings ----
+  String get myReports => _t('MY REPORTS', 'LAPORAN SAYA');
+  String get noMyReports => _t('None of your reports are nearby.', 'Tiada laporan anda berdekatan.');
+  String get deleteReport => _t('Delete report', 'Padam laporan');
+  String get reportDeleted => _t('Report deleted.', 'Laporan dipadam.');
+  String get reportDeleteFailed => _t('Could not delete the report.', 'Laporan tak dapat dipadam.');
+  String get deleteAccount => _t('Delete account', 'Padam akaun');
+  String get deleteAccountSub => _t('Removes your account, reports and votes for good.', 'Membuang akaun, laporan dan undi anda selama-lamanya.');
+  String get deleteAccountConfirm => _t('Enter your password to delete your account. This cannot be undone.', 'Masukkan kata laluan untuk memadam akaun anda. Ini tak boleh dibatalkan.');
+  String get accountDeleted => _t('Your account was deleted.', 'Akaun anda telah dipadam.');
+  String get wrongPassword => _t('Wrong password.', 'Kata laluan salah.');
+  String get deleteFailed => _t('Could not delete the account. Try again.', 'Akaun tak dapat dipadam. Cuba lagi.');
   String get settings => _t('Settings', 'Tetapan');
   String get mySpots => _t('MY PLACES', 'TEMPAT SAYA');
   String get notSet => _t('Not set', 'Belum ditetapkan');
@@ -309,6 +330,8 @@ class S {
     'Sebut belokan seterusnya dalam bahasa aplikasi',
   );
   String get avoidTolls => _t('Avoid tolls', 'Elak tol');
+  String get avoidHighways => _t('Avoid highways', 'Elak lebuh raya');
+  String get avoidHighwaysSub => _t('Prefer main roads over expressways', 'Utamakan jalan biasa berbanding lebuh raya');
   String get avoidTollsSub =>
       _t('Pick the toll-free route first', 'Pilih laluan tanpa tol dahulu');
   String get speedAlert => _t('Speeding alert', 'Amaran memandu laju');

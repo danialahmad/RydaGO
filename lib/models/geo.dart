@@ -148,6 +148,16 @@ RouteProjection projectOnRoute(
       projectOnRoute(p, pts, cum, fromSeg: fromSeg, toSeg: toSeg);
 }
 
+/// Zoom while driving: close in when slow or when a turn is near, further out at
+/// speed so there is more road to see ahead. 18 up to 40 km/h, 16.5 from 100 km/h,
+/// and never wider than 17.8 within 250 m of the next turn.
+double navZoom(double? speedKmh, double distToTurnM) {
+  final v = (speedKmh ?? 0).clamp(40.0, 100.0);
+  var zoom = 18.0 - (v - 40) / 60 * 1.5;
+  if (distToTurnM < 250) zoom = math.max(zoom, 17.8);
+  return (zoom * 10).round() / 10;
+}
+
 /// The point [metres] from [from] in direction [bearingDeg] (0 = north, clockwise).
 /// Flat-earth maths, plenty accurate over a few hundred metres.
 LatLng offsetAhead(LatLng from, double bearingDeg, double metres) {

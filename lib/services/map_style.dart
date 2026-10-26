@@ -22,7 +22,7 @@ bool _isRoad(Map<String, dynamic> l) {
 /// building extrusions (they tower over the road), no footpaths, thicker roads.
 /// Works on the decoded style JSON and returns a changed copy.
 Map<String, dynamic> flattenStyle(Map<String, dynamic> style,
-    {double roadScale = kRoadWidthScale}) {
+    {double roadScale = kRoadWidthScale, bool recolor = false}) {
   final out = jsonDecode(jsonEncode(style)) as Map<String, dynamic>;
   final layers = (out['layers'] as List).cast<Map<String, dynamic>>();
   // No 3D buildings (they tower over the road) and no footpath lines (dotted clutter).
@@ -36,8 +36,21 @@ Map<String, dynamic> flattenStyle(Map<String, dynamic> style,
     final paint = l['paint'] as Map<String, dynamic>?;
     if (paint == null || paint['line-width'] == null) continue;
     paint['line-width'] = scaleWidth(paint['line-width'], roadScale);
+    if (recolor) paint['line-color'] = roadColor(l['id'] as String);
   }
   return out;
+}
+
+/// Waze-like road colours for the light map: white roads with grey outlines,
+/// motorways and trunk roads a pale warm tone so the main roads stand out, and
+/// tunnels dimmed. The route line (blue) then reads clearly on top.
+String roadColor(String id) {
+  final casing = id.contains('casing');
+  final major = id.contains('motorway') || id.contains('trunk');
+  final tunnel = id.startsWith('tunnel_');
+  if (major) return casing ? '#d9b44a' : '#ffeeb8';
+  if (tunnel) return casing ? '#c9ced6' : '#eceef1';
+  return casing ? '#b8bec7' : '#ffffff';
 }
 
 /// The factor applied at [zoom]: 1 up to zoom 13, [k] from zoom 16, linear between.
@@ -78,12 +91,12 @@ double _round(double x) => (x * 100).round() / 100;
 
 /// Downloads the style at [url] and flattens it. Returns the style as a JSON
 /// string, or null if it could not be fetched (the caller falls back to the URL).
-Future<String?> loadFlatStyle(String url) async {
+Future<String?> loadFlatStyle(String url, {bool recolor = false}) async {
   try {
     final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
     if (res.statusCode != 200) return null;
     final style = jsonDecode(res.body) as Map<String, dynamic>;
-    return jsonEncode(flattenStyle(style));
+    return jsonEncode(flattenStyle(style, recolor: recolor));
   } catch (_) {
     return null;
   }

@@ -15,10 +15,19 @@ Sumber kod: `backend/main.go`, `auth.go`, `route.go`, `places.go`. Ujian: `backe
 | GET | `/reports` | tidak (token pilihan) | Laporan berdekatan yang masih sah |
 | POST | `/reports` | **ya** | Hantar laporan |
 | POST | `/reports/{id}/vote` | **ya** | "Masih ada?": undi naik atau turun |
+| DELETE | `/reports/{id}` | **ya** | Padam laporan sendiri |
+| DELETE | `/me` | **ya** | Padam akaun (perlu kata laluan) |
+| POST | `/shares` | **ya** | Mula kongsi perjalanan langsung |
+| PUT | `/shares/{token}` | **ya** | Kemas kini kedudukan dan ETA |
+| DELETE | `/shares/{token}` | **ya** | Tamat kongsi |
+| GET | `/shares/{token}` | tidak | Baca perjalanan yang dikongsi (sesiapa yang ada pautan) |
+| GET | `/s/{token}` | tidak | Halaman web untuk kawan membuka pautan |
 | GET | `/route` | tidak | Tiga pilihan laluan dengan arahan belokan, had laju dan tol (`?lang=en|ms`) |
 | GET | `/places` | tidak | Carian alamat atau tempat |
 
 Pengesahan: `Authorization: Bearer <token>`. Token sah 7 hari.
+
+**Had kadar** (dalam ingatan, per instans API; `429` dengan `Retry-After`): `/auth/*` dan `DELETE /me` 10 seminit per IP; `POST /reports` 6 seminit dengan letusan 5 per pengguna; undi 60 seminit; `/shares` 60 seminit per pengguna; `GET /shares/{token}` 120 seminit per IP. `X-Forwarded-For` sengaja diabaikan.
 
 ## `GET /health`
 
@@ -64,6 +73,19 @@ bagi setiap laporan; mengundi semula menukar undi sedia ada. `200 {"up": 3, "dow
 
 `subtype` pilihan. `201` dengan laporan yang disimpan (bentuk sama seperti di atas).
 `400` jika jenis atau subjenis tak sah, koordinat di luar julat, atau badan lebih 16 KB. `401` jika token tiada atau tak sah.
+`409` jika pengguna yang sama sudah melaporkan jenis yang sama dalam 100 m dalam 10 minit lepas (pendua). `429` jika terlalu laju.
+
+## `DELETE /reports/{id}` (log masuk)
+
+Hanya pemilik. `204`; `403` bukan laporan anda; `404` tiada; `400` id tak sah. Undi pada laporan itu turut dipadam.
+
+## `DELETE /me` (log masuk)
+
+Badan: `{"password": "..."}` (disahkan semula). Memadam pengguna, semua laporannya dan undinya. `204`; `403` kata laluan salah; `401` token tak sah.
+
+## Kongsi perjalanan langsung
+
+`POST /shares` badan `{"dest_name", "dest_lat", "dest_lng", "lat", "lng", "eta_minutes"}` memulangkan `201 {"token", "path": "/s/<token>"}`. Token 128-bit rawak. App menghantar `PUT /shares/{token}` (badan sama) setiap ~10 s semasa memandu dan `DELETE` bila tiba atau berhenti. `GET /shares/{token}` (tanpa log masuk) memulangkan `{dest_name, dest_lat, dest_lng, lat, lng, eta_at, updated_at, ended, stale}`; `stale` bermaksud tiada kemas kini 2 minit. Pautan tamat 8 jam selepas dibuat (`404`). `PUT` selepas tamat memberi `410`. Halaman `/s/{token}` menyelaraskan diri setiap 10 s dan tidak memuatkan apa-apa dari tapak lain.
 
 ### Jenis dan subjenis laporan
 
@@ -79,7 +101,9 @@ Subjenis pertama ialah lalai yang dihantar app. **Jadual ini mesti sama** dengan
 | `camera` | Kamera | `speed`, `red_light` |
 | `closed` | Jalan tutup | `road`, `lane` |
 
-## `GET /route?from=lat,lng&to=lat,lng&lang=en`
+## `GET /route?from=lat,lng&to=lat,lng&lang=en&avoid=highways`
+
+`avoid`: senarai dipisah koma, `highways` dan/atau `ferries` (lain diabaikan). Sehingga **3** laluan berbeza dipulangkan: pilihan bernama (`fastest`, `notoll`, `shortest`) dahulu, kemudian laluan alternatif sebenar daripada Valhalla (`id` `alt1`, `alt2`, label "Alternative"/"Alternatif") bagi mengisi tempat. Pilihan yang sama dengan yang terdahulu (panjang, masa dan jalan utama sama) digugurkan.
 
 `lang`: `en` (lalai) atau `ms`. Menentukan bahasa `label`, `note` dan `text`. Mesej ralat API sentiasa English; app menterjemah mengikut status.
 
@@ -106,6 +130,7 @@ Minta Valhalla tiga kali selari. Pulangkan hanya yang berjaya.
 ]
 ```
 
+- `maneuvers[]` boleh ada `exit` (nombor keluar pada papan tanda, cth `"3310A"`), `toward` (destinasi pada papan tanda, cth `"Gombak / Batu Caves"`) dan `lanes[]` (`{dirs, valid, active}`; hanya di mana OSM ada data lorong, jarang di Malaysia). Semuanya tiada bila tak diketahui.
 - `limits[]`: had laju dalam km/j untuk segmen `points[from]` hingga `points[to]`. Dianggar daripada Valhalla
   `trace_attributes`. Hanya kira-kira sepertiga jalan di Malaysia ada `maxspeed` dalam OSM, jadi senarai
   mungkin pendek atau kosong. App membawa had terakhir ke hadapan 400 m, selepas itu menyembunyikan tanda.

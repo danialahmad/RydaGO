@@ -5,7 +5,9 @@ import '../../app/strings.dart';
 import '../../app/theme.dart';
 import '../../models/place.dart';
 import '../../state/auth.dart';
+import '../../services/api.dart';
 import '../../state/demo.dart';
+import '../../state/reports.dart';
 import '../../state/saved_places.dart';
 import '../../state/settings.dart';
 import 'login_screen.dart';
@@ -21,6 +23,7 @@ class SettingsScreen extends ConsumerWidget {
     final saved = ref.watch(savedPlacesProvider);
     final settings = ref.watch(settingsProvider);
     final demo = ref.watch(demoProvider);
+    final mine = ref.watch(reportsProvider.select((rs) => [for (final r in rs) if (r.mine) r]));
     final notifier = ref.read(settingsProvider.notifier);
     final s = S.of(context);
 
@@ -136,6 +139,48 @@ class SettingsScreen extends ConsumerWidget {
               subtitle: Text(s.favoritesHint),
             ),
 
+          // ---- my reports ----
+          if (auth != null) ...[
+            _Section(s.myReports),
+            if (mine.isEmpty)
+              ListTile(
+                leading: const Icon(
+                  Icons.campaign_outlined,
+                  color: AppColors.muted,
+                ),
+                title: Text(s.noMyReports),
+              ),
+            for (final r in mine)
+              ListTile(
+                leading: CircleAvatar(
+                  radius: 18,
+                  backgroundColor: r.type.color,
+                  child: Icon(r.type.icon, color: Colors.white, size: 20),
+                ),
+                title: Text(
+                  r.title(s),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                trailing: IconButton(
+                  tooltip: s.deleteReport,
+                  icon: const Icon(Icons.delete_outline_rounded),
+                  onPressed: () async {
+                    final messenger = ScaffoldMessenger.of(context);
+                    final ok = await ref
+                        .read(reportsProvider.notifier)
+                        .deleteMine(r);
+                    messenger.showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          ok ? s.reportDeleted : s.reportDeleteFailed,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+          ],
+
           // ---- navigation ----
           _Section(s.navigationSection),
           SwitchListTile(
@@ -151,6 +196,13 @@ class SettingsScreen extends ConsumerWidget {
             subtitle: Text(s.avoidTollsSub),
             value: settings.avoidTolls,
             onChanged: notifier.setAvoidTolls,
+          ),
+          SwitchListTile(
+            secondary: const Icon(Icons.add_road_rounded),
+            title: Text(s.avoidHighways),
+            subtitle: Text(s.avoidHighwaysSub),
+            value: settings.avoidHighways,
+            onChanged: notifier.setAvoidHighways,
           ),
           ListTile(
             leading: const Icon(Icons.speed_rounded),
@@ -242,6 +294,20 @@ class SettingsScreen extends ConsumerWidget {
             onChanged: (v) => ref.read(demoProvider.notifier).set(v),
           ),
 
+          // ---- delete account ----
+          if (auth != null) ...[
+            const SizedBox(height: 8),
+            ListTile(
+              leading: const Icon(Icons.person_off_outlined, color: AppColors.danger),
+              title: Text(
+                s.deleteAccount,
+                style: const TextStyle(color: AppColors.danger, fontWeight: FontWeight.w700),
+              ),
+              subtitle: Text(s.deleteAccountSub),
+              onTap: () => _confirmDeleteAccount(context, ref),
+            ),
+          ],
+
           // ---- about ----
           _Section(s.aboutSection),
           ListTile(
@@ -325,5 +391,51 @@ class _PlaceRow extends StatelessWidget {
             ),
       onTap: onEdit,
     );
+  }
+}
+
+/// Asks for the password, then deletes the account on the server and signs out.
+Future<void> _confirmDeleteAccount(BuildContext context, WidgetRef ref) async {
+  final s = S.of(context);
+  final messenger = ScaffoldMessenger.of(context);
+  final auth = ref.read(authProvider);
+  if (auth == null) return;
+  final controller = TextEditingController();
+  final password = await showDialog<String>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(s.deleteAccount),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        Text(s.deleteAccountConfirm),
+        const SizedBox(height: 12),
+        TextField(
+          controller: controller,
+          obscureText: true,
+          autofocus: true,
+          decoration: InputDecoration(hintText: s.password),
+        ),
+      ]),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s.cancel)),
+        TextButton(
+          style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+          onPressed: () => Navigator.pop(ctx, controller.text),
+          child: Text(s.deleteAccount),
+        ),
+      ],
+    ),
+  );
+  controller.dispose();
+  if (password == null || password.isEmpty) return;
+  try {
+    await Api.deleteAccount(token: auth.token, password: password);
+    await ref.read(authProvider.notifier).logout();
+    messenger.showSnackBar(SnackBar(content: Text(s.accountDeleted)));
+  } on WrongPasswordException {
+    messenger.showSnackBar(SnackBar(content: Text(s.wrongPassword)));
+  } on UnauthorizedException {
+    await ref.read(authProvider.notifier).logout(); // the token was already invalid
+  } catch (_) {
+    messenger.showSnackBar(SnackBar(content: Text(s.deleteFailed)));
   }
 }

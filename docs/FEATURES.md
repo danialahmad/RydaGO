@@ -46,7 +46,7 @@ Lajur "Perlu" menyebut apa yang perlu disediakan (backend, data, atau platform).
 | Beberapa laluan dengan masa, waktu tiba, "+N min" berbanding terpantas | ✅ | | Tiga jenis: Terpantas, Tanpa tol, Jarak terpendek (satu panggilan Valhalla setiap satu) |
 | "Melalui <jalan>" untuk setiap laluan | ✅ | | Jalan terpanjang dalam laluan |
 | Pilihan "Elak tol" | ✅ | | Tetapan memilih laluan Tanpa tol dahulu |
-| Elak lebuh raya, feri, jalan tak berturap | ⬜ | 2 | Pilihan `costing_options` Valhalla (`use_highways`, `use_ferry`, ...) |
+| Elak lebuh raya | ✅ | | Tetapan > Avoid highways (`use_highways: 0`). Feri tersedia dalam API (`avoid=ferries`) tetapi belum ada dalam UI |
 | Harga tol | ⬜ | 2 | Valhalla tak beri harga. Perlu jadual tol Malaysia |
 | Masalah di laluan (kerja jalan, sesak) | ⬜ | 2 | Perlu data trafik/report di sepanjang laluan |
 | Jenis kenderaan (motosikal, teksi, EV) | ⬜ | 2 | Valhalla ada costing `motorcycle`. Mudah untuk motosikal |
@@ -58,7 +58,12 @@ Lajur "Perlu" menyebut apa yang perlu disediakan (backend, data, atau platform).
 |---|---|---|---|
 | Banner belokan: ikon, jarak, nama jalan | ✅ | | `nav_overlay.dart` |
 | "Kemudian" (belokan kedua yang dekat) | ✅ | | Hanya bila dalam 500 m |
-| Panduan lorong | ⬜ | 2 | Valhalla ada data lorong dalam respons terperinci |
+| Papan tanda keluar (nombor keluar dan "ke") | ✅ | | Dalam banner belokan, dari data Valhalla |
+| Panduan lorong | 🟡 | | UI dan API siap, tetapi OSM jarang ada tag lorong di Malaysia jadi biasanya tiada |
+| Zum ikut kelajuan dan jarak ke belokan | ✅ | | `navZoom` dalam `models/geo.dart` |
+| Peta rata, jalan tebal, tiada bangunan 3D | ✅ | | `services/map_style.dart` |
+| Ringkasan sebelum Start (laporan di laluan) | ✅ | | Kad laluan: kamera, polis, kemalangan di sepanjang laluan |
+| Laluan alternatif sebenar | ✅ | | Sehingga 3 laluan berbeza; pendua digugurkan |
 | Arahan suara (English dan Melayu) | 🟡 | | `flutter_tts`, ikut bahasa dipilih. Bergantung suara yang ada pada peranti/pelayar (mungkin tiada suara Melayu). Belum diuji pada telefon sebenar |
 | Bar bawah: waktu tiba, baki masa dan jarak, "Melalui", kemajuan | ✅ | | Ketuk untuk kembangkan |
 | Speedometer | ✅ | | Dari GPS |
@@ -66,7 +71,7 @@ Lajur "Perlu" menyebut apa yang perlu disediakan (backend, data, atau platform).
 | Amaran memandu laju | 🟡 | | Meter jadi merah + amaran suara sekali. Tetapan: Mati / Tepat had / +5 / +10. Hanya di mana had diketahui |
 | Kira semula laluan bila tersasar | ✅ | | `navigation.dart`: >120 m serta-merta, atau 3 fix >50 m; jeda 8 saat |
 | Senyap / hidupkan suara | ✅ | | |
-| Kongsi ETA | 🟡 | 2 | Hanya salin teks. Waze beri pautan jejak langsung |
+| Kongsi ETA | ✅ | | Pautan langsung (`/s/<token>`) yang dikemas kini setiap 10 s; tanpa log masuk jatuh balik ke salin teks |
 | Skrin kekal hidup semasa navigasi | ⬜ | 1 | `wakelock_plus` |
 | Navigasi di latar belakang + notifikasi | ⬜ | 1 | Perkhidmatan latar (native). Penting untuk telefon |
 | Skrin tiba | ✅ | | "Anda telah sampai" + Selesai |

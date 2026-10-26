@@ -24,11 +24,14 @@ var valhallaURL = func() string {
 var valhallaClient = &http.Client{Timeout: 20 * time.Second}
 
 type maneuverOut struct {
-	Text   string  `json:"text"`
-	Street string  `json:"street,omitempty"` // first street name of the step, shown in the banner
-	Type   int     `json:"type"`             // Valhalla maneuver type, used by the app to pick an icon
-	Km     float64 `json:"km"`               // length of this step
-	Index  int     `json:"index"`            // index into Points where the step begins
+	Text   string    `json:"text"`
+	Street string    `json:"street,omitempty"` // first street name of the step, shown in the banner
+	Type   int       `json:"type"`             // Valhalla maneuver type, used by the app to pick an icon
+	Km     float64   `json:"km"`               // length of this step
+	Index  int       `json:"index"`            // index into Points where the step begins
+	Exit   string    `json:"exit,omitempty"`   // highway exit number from the road sign, e.g. "3310A"
+	Toward string    `json:"toward,omitempty"` // destinations on the sign, e.g. "Gombak / Batu Caves"
+	Lanes  []laneOut `json:"lanes,omitempty"`  // only where OpenStreetMap has lane data
 }
 
 // limitRange says the posted speed limit is Kmh for route points From..To.
@@ -58,13 +61,14 @@ var routeVariants = []struct {
 	id          string
 	label, note map[string]string // by language
 	opts        map[string]any
+	alternates  int // extra routes to ask Valhalla for with this variant
 }{
 	{"fastest", map[string]string{langEN: "Fastest", langMS: "Terpantas"},
-		map[string]string{langEN: "Fastest route", langMS: "Laluan terpantas"}, map[string]any{}},
+		map[string]string{langEN: "Fastest route", langMS: "Laluan terpantas"}, map[string]any{}, 2},
 	{"notoll", map[string]string{langEN: "No tolls", langMS: "Tanpa tol"},
-		map[string]string{langEN: "Avoids tolls", langMS: "Elak tol"}, map[string]any{"use_tolls": 0.0}},
+		map[string]string{langEN: "Avoids tolls", langMS: "Elak tol"}, map[string]any{"use_tolls": 0.0}, 0},
 	{"shortest", map[string]string{langEN: "Shortest", langMS: "Jarak terpendek"},
-		map[string]string{langEN: "Shortest distance", langMS: "Jarak paling dekat"}, map[string]any{"shortest": true}},
+		map[string]string{langEN: "Shortest distance", langMS: "Jarak paling dekat"}, map[string]any{"shortest": true}, 0},
 }
 
 func parseLatLng(s string) (lat, lng float64, ok bool) {
@@ -82,6 +86,7 @@ func parseLatLng(s string) (lat, lng float64, ok bool) {
 
 func (s *server) route(w http.ResponseWriter, r *http.Request) {
 	lang := langFrom(r)
+	avoid := avoidOpts(r.URL.Query().Get("avoid"))
 	fromLat, fromLng, ok1 := parseLatLng(r.URL.Query().Get("from"))
 	toLat, toLng, ok2 := parseLatLng(r.URL.Query().Get("to"))
 	if !ok1 || !ok2 {
@@ -89,29 +94,38 @@ func (s *server) route(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	results := make([]*routeOut, len(routeVariants))
+	results := make([][]*routeOut, len(routeVariants))
 	var wg sync.WaitGroup
 	for i, v := range routeVariants {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			out, err := askValhalla(r.Context(), lang, fromLat, fromLng, toLat, toLng, v.opts)
+			out, err := askValhalla(r.Context(), lang, fromLat, fromLng, toLat, toLng, withOpts(v.opts, avoid), v.alternates)
 			if err != nil {
 				log.Printf("valhalla %s: %v", v.id, err)
 				return
 			}
-			out.ID, out.Label, out.Note = v.id, v.label[lang], v.note[lang]
+			out[0].ID, out[0].Label, out[0].Note = v.id, v.label[lang], v.note[lang]
+			for n, alt := range out[1:] {
+				alt.ID = "alt" + strconv.Itoa(n+1)
+				alt.Label, alt.Note = altLabel[lang], altNote[lang]
+			}
 			results[i] = out
 		}()
 	}
 	wg.Wait()
 
-	routes := []routeOut{}
+	var base, alts []routeOut
 	for _, res := range results {
-		if res != nil {
-			routes = append(routes, *res)
+		if len(res) == 0 {
+			continue
+		}
+		base = append(base, *res[0])
+		for _, a := range res[1:] {
+			alts = append(alts, *a)
 		}
 	}
+	routes := pickRoutes(base, alts, maxRoutes)
 	if len(routes) == 0 {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "routing unavailable"})
 		return
@@ -119,8 +133,10 @@ func (s *server) route(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, routes)
 }
 
-func askValhalla(ctx context.Context, lang string, fromLat, fromLng, toLat, toLng float64, autoOpts map[string]any) (*routeOut, error) {
-	body, _ := json.Marshal(map[string]any{
+// askValhalla returns the requested route first, then up to [alternates] other
+// routes Valhalla found between the same two points.
+func askValhalla(ctx context.Context, lang string, fromLat, fromLng, toLat, toLng float64, autoOpts map[string]any, alternates int) ([]*routeOut, error) {
+	payload := map[string]any{
 		"locations": []map[string]float64{
 			{"lat": fromLat, "lon": fromLng},
 			{"lat": toLat, "lon": toLng},
@@ -128,7 +144,11 @@ func askValhalla(ctx context.Context, lang string, fromLat, fromLng, toLat, toLn
 		"costing":         "auto",
 		"costing_options": map[string]any{"auto": autoOpts},
 		"units":           "kilometers",
-	})
+	}
+	if alternates > 0 {
+		payload["alternates"] = alternates
+	}
+	body, _ := json.Marshal(payload)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, valhallaURL+"/route", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
@@ -143,33 +163,59 @@ func askValhalla(ctx context.Context, lang string, fromLat, fromLng, toLat, toLn
 		return nil, fmt.Errorf("status %d", res.StatusCode)
 	}
 	var v struct {
-		Trip struct {
-			Summary struct {
-				Time   float64 `json:"time"`
-				Length float64 `json:"length"`
-			} `json:"summary"`
-			Legs []struct {
-				Shape     string `json:"shape"`
-				Maneuvers []struct {
-					Type                int      `json:"type"`
-					Length              float64  `json:"length"`
-					BeginShapeIndex     int      `json:"begin_shape_index"`
-					StreetNames         []string `json:"street_names"`
-					RoundaboutExitCount int      `json:"roundabout_exit_count"`
-					Toll                bool     `json:"toll"`
-				} `json:"maneuvers"`
-			} `json:"legs"`
-		} `json:"trip"`
+		Trip       valhallaTrip `json:"trip"`
+		Alternates []struct {
+			Trip valhallaTrip `json:"trip"`
+		} `json:"alternates"`
 	}
 	if err := json.NewDecoder(res.Body).Decode(&v); err != nil {
 		return nil, err
 	}
+	first, err := buildRoute(ctx, lang, v.Trip)
+	if err != nil {
+		return nil, err
+	}
+	out := []*routeOut{first}
+	for _, a := range v.Alternates {
+		if r, err := buildRoute(ctx, lang, a.Trip); err == nil {
+			out = append(out, r)
+		}
+	}
+	return out, nil
+}
+
+// valhallaTrip is the part of a Valhalla trip the API reads.
+type valhallaTrip = struct {
+	Summary struct {
+		Time   float64 `json:"time"`
+		Length float64 `json:"length"`
+	} `json:"summary"`
+	Legs []struct {
+		Shape     string `json:"shape"`
+		Maneuvers []struct {
+			Type                int      `json:"type"`
+			Length              float64  `json:"length"`
+			BeginShapeIndex     int      `json:"begin_shape_index"`
+			StreetNames         []string `json:"street_names"`
+			RoundaboutExitCount int      `json:"roundabout_exit_count"`
+			Toll                bool     `json:"toll"`
+			Sign                struct {
+				ExitNumber []signElement `json:"exit_number_elements"`
+				Toward     []signElement `json:"exit_toward_elements"`
+			} `json:"sign"`
+			Lanes []valhallaLane `json:"lanes"`
+		} `json:"maneuvers"`
+	} `json:"legs"`
+}
+
+// buildRoute turns one Valhalla trip into the app's route format.
+func buildRoute(ctx context.Context, lang string, trip valhallaTrip) (*routeOut, error) {
 	var pts [][2]float64
 	maneuvers := []maneuverOut{}
 	limits := []limitRange{}
 	via, viaKm := "", 0.0
 	tollKm := 0.0
-	for _, leg := range v.Trip.Legs {
+	for _, leg := range trip.Legs {
 		offset := len(pts) // maneuver indexes are relative to their own leg's shape
 		pts = append(pts, decodePolyline6(leg.Shape)...)
 		for _, l := range traceLimits(ctx, leg.Shape) {
@@ -192,6 +238,9 @@ func askValhalla(ctx context.Context, lang string, fromLat, fromLng, toLat, toLn
 				Type:   m.Type,
 				Km:     m.Length,
 				Index:  min(offset+m.BeginShapeIndex, len(pts)-1),
+				Exit:   firstText(m.Sign.ExitNumber),
+				Toward: joinText(m.Sign.Toward, 2),
+				Lanes:  lanesOut(m.Lanes),
 			})
 		}
 	}
@@ -199,8 +248,8 @@ func askValhalla(ctx context.Context, lang string, fromLat, fromLng, toLat, toLn
 		return nil, fmt.Errorf("empty route")
 	}
 	return &routeOut{
-		Minutes:   max(1, int(v.Trip.Summary.Time/60+0.5)),
-		Km:        float64(int(v.Trip.Summary.Length*10+0.5)) / 10,
+		Minutes:   max(1, int(trip.Summary.Time/60+0.5)),
+		Km:        float64(int(trip.Summary.Length*10+0.5)) / 10,
 		Points:    pts,
 		Maneuvers: maneuvers,
 		Via:       via,
@@ -294,6 +343,73 @@ func decodePolyline6(s string) [][2]float64 {
 			}
 		}
 		out = append(out, [2]float64{float64(lat) / 1e6, float64(lng) / 1e6})
+	}
+	return out
+}
+
+// maxRoutes is how many route cards the app shows at most.
+const maxRoutes = 3
+
+var (
+	altLabel = map[string]string{langEN: "Alternative", langMS: "Alternatif"}
+	altNote  = map[string]string{langEN: "Another way to go", langMS: "Jalan lain"}
+)
+
+// sameRoute says two routes are, for a driver, the same choice: equal length,
+// time and main road.
+func sameRoute(a, b routeOut) bool {
+	return a.Km == b.Km && a.Minutes == b.Minutes && a.Via == b.Via
+}
+
+// pickRoutes returns at most [limit] distinct routes: the named choices first
+// (fastest, no tolls, shortest), then real alternatives from Valhalla to fill the
+// list. Choices that came out identical to an earlier one (no tolls on a road
+// with none, say) are dropped, so every card on screen is a different decision.
+func pickRoutes(base, alts []routeOut, limit int) []routeOut {
+	out := []routeOut{}
+	add := func(r routeOut) {
+		if len(out) >= limit {
+			return
+		}
+		for _, have := range out {
+			if sameRoute(have, r) {
+				return
+			}
+		}
+		out = append(out, r)
+	}
+	for _, r := range base {
+		add(r)
+	}
+	for _, r := range alts {
+		add(r)
+	}
+	return out
+}
+
+// avoidOpts turns the app's ?avoid=highways,ferries into Valhalla costing options.
+// Unknown words are ignored.
+func avoidOpts(avoid string) map[string]any {
+	opts := map[string]any{}
+	for _, a := range strings.Split(avoid, ",") {
+		switch strings.TrimSpace(a) {
+		case "highways":
+			opts["use_highways"] = 0.0
+		case "ferries":
+			opts["use_ferry"] = 0.0
+		}
+	}
+	return opts
+}
+
+// withOpts is base plus extra (extra wins), as a new map.
+func withOpts(base, extra map[string]any) map[string]any {
+	out := make(map[string]any, len(base)+len(extra))
+	for k, v := range base {
+		out[k] = v
+	}
+	for k, v := range extra {
+		out[k] = v
 	}
 	return out
 }

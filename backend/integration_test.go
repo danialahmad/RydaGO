@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -31,6 +32,12 @@ import (
 //	  golang:1.26-alpine go test ./...
 
 func integrationServer(t *testing.T) (*httptest.Server, *pgxpool.Pool) {
+	t.Helper()
+	return integrationServerWith(t, true)
+}
+
+// integrationServerWith starts the stack; relax lifts the per-user report limits.
+func integrationServerWith(t *testing.T, relax bool) (*httptest.Server, *pgxpool.Pool) {
 	t.Helper()
 	adminDSN := os.Getenv("TEST_DATABASE_URL")
 	if adminDSN == "" {
@@ -65,7 +72,7 @@ func integrationServer(t *testing.T) (*httptest.Server, *pgxpool.Pool) {
 	t.Cleanup(pool.Close)
 
 	hash, _ := bcrypt.GenerateFromPassword([]byte("x"), bcrypt.MinCost)
-	s := &server{db: pool, jwtSecret: []byte(strings.Repeat("k", 32)), dummyHash: hash}
+	s := &server{db: pool, jwtSecret: []byte(strings.Repeat("k", 32)), dummyHash: hash, relaxLimits: relax}
 	ts := httptest.NewServer(s.routes())
 	t.Cleanup(ts.Close)
 	return ts, pool
@@ -112,11 +119,16 @@ func (c apiClient) register(email string) string {
 	return v.Token
 }
 
-// newReport files a report at a fixed spot in KL and returns its id.
+// reportSpot counts reports so each test report lands in a different place, more
+// than the 100 m duplicate radius from the last (all stay inside the 2 km queries).
+var reportSpot atomic.Int64
+
+// newReport files a report near KLCC and returns its id.
 func (c apiClient) newReport(token, typ, subtype string) int64 {
 	c.t.Helper()
+	lng := 101.7116 + float64(reportSpot.Add(1)%10)*0.0013
 	code, out := c.do("POST", "/reports", token,
-		map[string]any{"type": typ, "subtype": subtype, "lat": 3.1579, "lng": 101.7116})
+		map[string]any{"type": typ, "subtype": subtype, "lat": 3.1579, "lng": lng})
 	if code != http.StatusCreated {
 		c.t.Fatalf("create report: %d %s", code, out)
 	}
@@ -279,4 +291,219 @@ func TestDatabaseBackedAPI(t *testing.T) {
 			t.Error("the unconfirmed one must stay gone")
 		}
 	})
+}
+
+func TestDuplicatesDeletionAndAccountRemoval(t *testing.T) {
+	ts, pool := integrationServer(t)
+	c := apiClient{t: t, base: ts.URL}
+	alice := c.register("alice@example.my")
+	bob := c.register("bob@example.my")
+	spot := map[string]any{"type": "police", "subtype": "hidden", "lat": 3.1579, "lng": 101.7116}
+
+	t.Run("the same user reporting the same thing in the same place is a duplicate", func(t *testing.T) {
+		if code, out := c.do("POST", "/reports", alice, spot); code != http.StatusCreated {
+			t.Fatalf("first report: %d %s", code, out)
+		}
+		if code, _ := c.do("POST", "/reports", alice, spot); code != http.StatusConflict {
+			t.Errorf("repeat: %d, want 409", code)
+		}
+		other := map[string]any{"type": "jam", "subtype": "heavy", "lat": 3.1579, "lng": 101.7116}
+		if code, _ := c.do("POST", "/reports", alice, other); code != http.StatusCreated {
+			t.Errorf("a different type at the same spot is fine: %d", code)
+		}
+		if code, _ := c.do("POST", "/reports", bob, spot); code != http.StatusCreated {
+			t.Errorf("another user reporting the same thing is a confirmation: %d", code)
+		}
+		far := map[string]any{"type": "police", "subtype": "hidden", "lat": 3.1579, "lng": 101.7316}
+		if code, _ := c.do("POST", "/reports", alice, far); code != http.StatusCreated {
+			t.Errorf("the same type 2 km away is fine: %d", code)
+		}
+	})
+
+	t.Run("only the owner can delete a report, and its votes go with it", func(t *testing.T) {
+		id := c.newReport(alice, "hazard", "pothole")
+		c.vote(bob, id, "up")
+		path := fmt.Sprintf("/reports/%d", id)
+		if code, _ := c.do("DELETE", path, "", nil); code != http.StatusUnauthorized {
+			t.Errorf("no token: %d, want 401", code)
+		}
+		if code, _ := c.do("DELETE", path, bob, nil); code != http.StatusForbidden {
+			t.Errorf("other user: %d, want 403", code)
+		}
+		if code, _ := c.do("DELETE", path, alice, nil); code != http.StatusNoContent {
+			t.Errorf("owner: %d, want 204", code)
+		}
+		if code, _ := c.do("DELETE", path, alice, nil); code != http.StatusNotFound {
+			t.Errorf("again: %d, want 404", code)
+		}
+		var votes int
+		pool.QueryRow(context.Background(), `SELECT count(*) FROM report_votes WHERE report_id = $1`, id).Scan(&votes)
+		if votes != 0 {
+			t.Errorf("%d votes left behind", votes)
+		}
+		if code, _ := c.do("DELETE", "/reports/abc", alice, nil); code != http.StatusBadRequest {
+			t.Errorf("bad id: %d, want 400", code)
+		}
+	})
+
+	t.Run("deleting an account needs the password and removes the user's reports and votes", func(t *testing.T) {
+		carol := c.register("carol@example.my")
+		mine := c.newReport(carol, "camera", "speed")
+		theirs := c.newReport(alice, "closed", "road")
+		c.vote(carol, theirs, "up")
+
+		if code, _ := c.do("DELETE", "/me", "", map[string]string{"password": "password123"}); code != http.StatusUnauthorized {
+			t.Errorf("no token: %d, want 401", code)
+		}
+		if code, _ := c.do("DELETE", "/me", carol, map[string]string{"password": "wrong-password"}); code != http.StatusForbidden {
+			t.Errorf("wrong password: %d, want 403", code)
+		}
+		if code, out := c.do("DELETE", "/me", carol, map[string]string{"password": "password123"}); code != http.StatusNoContent {
+			t.Fatalf("delete: %d %s", code, out)
+		}
+		var users, reports, votes int
+		ctx := context.Background()
+		pool.QueryRow(ctx, `SELECT count(*) FROM users WHERE email = 'carol@example.my'`).Scan(&users)
+		pool.QueryRow(ctx, `SELECT count(*) FROM reports WHERE id = $1`, mine).Scan(&reports)
+		pool.QueryRow(ctx, `SELECT count(*) FROM report_votes WHERE report_id = $1`, theirs).Scan(&votes)
+		if users != 0 || reports != 0 || votes != 0 {
+			t.Errorf("left behind: users=%d reports=%d votes=%d", users, reports, votes)
+		}
+		if code, _ := c.do("POST", "/auth/login", "", map[string]string{"email": "carol@example.my", "password": "password123"}); code != http.StatusUnauthorized {
+			t.Errorf("login after deletion: %d, want 401", code)
+		}
+	})
+}
+
+func TestRateLimitsOnTheRealRouter(t *testing.T) {
+	ts, _ := integrationServerWith(t, false)
+	c := apiClient{t: t, base: ts.URL}
+	var last int
+	for i := 0; i < 12; i++ {
+		last, _ = c.do("POST", "/auth/login", "", map[string]string{"email": "nobody@example.my", "password": "password123"})
+	}
+	if last != http.StatusTooManyRequests {
+		t.Errorf("12 logins in a row ended with %d, want 429", last)
+	}
+}
+
+func TestReportRateLimitPerUser(t *testing.T) {
+	ts, _ := integrationServerWith(t, false)
+	c := apiClient{t: t, base: ts.URL}
+	a := c.register("rl-a@example.my")
+	b := c.register("rl-b@example.my")
+	codes := make([]int, 0, 7)
+	for i := 0; i < 7; i++ {
+		code, _ := c.do("POST", "/reports", a,
+			map[string]any{"type": "jam", "subtype": "heavy", "lat": 3.1 + float64(i)*0.01, "lng": 101.7})
+		codes = append(codes, code)
+	}
+	for i, code := range codes {
+		want := http.StatusCreated
+		if i >= 5 {
+			want = http.StatusTooManyRequests // burst of 5, then 6 per minute
+		}
+		if code != want {
+			t.Errorf("report %d: %d, want %d (all: %v)", i+1, code, want, codes)
+		}
+	}
+	if code, _ := c.do("POST", "/reports", b,
+		map[string]any{"type": "jam", "subtype": "heavy", "lat": 3.5, "lng": 101.7}); code != http.StatusCreated {
+		t.Errorf("another user has their own allowance: %d", code)
+	}
+}
+
+func TestLiveShare(t *testing.T) {
+	ts, pool := integrationServer(t)
+	c := apiClient{t: t, base: ts.URL}
+	owner := c.register("sharer@example.my")
+	other := c.register("nosy@example.my")
+	start := map[string]any{"dest_name": "Batu Caves", "dest_lat": 3.2369, "dest_lng": 101.6833,
+		"lat": 3.1579, "lng": 101.7116, "eta_minutes": 25}
+
+	if code, _ := c.do("POST", "/shares", "", start); code != http.StatusUnauthorized {
+		t.Errorf("create without login: %d, want 401", code)
+	}
+	if code, _ := c.do("POST", "/shares", owner, map[string]any{"dest_name": "x", "dest_lat": 99, "dest_lng": 0, "lat": 0, "lng": 0}); code != http.StatusBadRequest {
+		t.Errorf("bad coordinates: %d, want 400", code)
+	}
+	code, out := c.do("POST", "/shares", owner, start)
+	if code != http.StatusCreated {
+		t.Fatalf("create: %d %s", code, out)
+	}
+	var made struct{ Token, Path string }
+	json.Unmarshal(out, &made)
+	if len(made.Token) < 16 || made.Path != "/s/"+made.Token {
+		t.Fatalf("token/path = %+v", made)
+	}
+
+	// Anyone with the link can read it, no login.
+	code, out = c.do("GET", "/shares/"+made.Token, "", nil)
+	var got shareOut
+	json.Unmarshal(out, &got)
+	if code != http.StatusOK || got.DestName != "Batu Caves" || got.Ended || got.Stale {
+		t.Fatalf("public read: %d %+v", code, got)
+	}
+	if mins := time.Until(got.EtaAt).Minutes(); mins < 23 || mins > 26 {
+		t.Errorf("eta is %.1f minutes away, want ~25", mins)
+	}
+
+	// Only the owner may update or end it.
+	move := map[string]any{"dest_name": "Batu Caves", "dest_lat": 3.2369, "dest_lng": 101.6833,
+		"lat": 3.2, "lng": 101.7, "eta_minutes": 10}
+	if code, _ := c.do("PUT", "/shares/"+made.Token, other, move); code != http.StatusForbidden {
+		t.Errorf("update by another user: %d, want 403", code)
+	}
+	if code, _ := c.do("PUT", "/shares/"+made.Token, owner, move); code != http.StatusNoContent {
+		t.Fatalf("update by owner: %d, want 204", code)
+	}
+	_, out = c.do("GET", "/shares/"+made.Token, "", nil)
+	json.Unmarshal(out, &got)
+	if got.Lat != 3.2 || time.Until(got.EtaAt).Minutes() > 11 {
+		t.Errorf("update not applied: %+v", got)
+	}
+
+	// An old signal is flagged as stale.
+	pool.Exec(context.Background(), `UPDATE shares SET updated_at = now() - interval '5 minutes' WHERE token = $1`, made.Token)
+	_, out = c.do("GET", "/shares/"+made.Token, "", nil)
+	json.Unmarshal(out, &got)
+	if !got.Stale {
+		t.Error("a share not updated for 5 minutes should be stale")
+	}
+
+	if code, _ := c.do("DELETE", "/shares/"+made.Token, other, nil); code != http.StatusForbidden {
+		t.Errorf("end by another user: %d, want 403", code)
+	}
+	if code, _ := c.do("DELETE", "/shares/"+made.Token, owner, nil); code != http.StatusNoContent {
+		t.Fatalf("end by owner: %d, want 204", code)
+	}
+	_, out = c.do("GET", "/shares/"+made.Token, "", nil)
+	json.Unmarshal(out, &got)
+	if !got.Ended || got.Stale {
+		t.Errorf("ended share: %+v", got)
+	}
+	if code, _ := c.do("PUT", "/shares/"+made.Token, owner, move); code != http.StatusGone {
+		t.Errorf("update after end: %d, want 410", code)
+	}
+
+	// Unknown or malformed tokens are 404, and links expire after the max age.
+	if code, _ := c.do("GET", "/shares/doesnotexistdoesnotexist", "", nil); code != http.StatusNotFound {
+		t.Errorf("unknown token: %d, want 404", code)
+	}
+	if code, _ := c.do("GET", "/shares/short", "", nil); code != http.StatusNotFound {
+		t.Errorf("malformed token: %d, want 404", code)
+	}
+	pool.Exec(context.Background(), `UPDATE shares SET created_at = now() - interval '9 hours' WHERE token = $1`, made.Token)
+	if code, _ := c.do("GET", "/shares/"+made.Token, "", nil); code != http.StatusNotFound {
+		t.Errorf("expired share: %d, want 404", code)
+	}
+
+	// The public page carries the token and loads nothing from other sites.
+	code, page := c.do("GET", "/s/"+made.Token, "", nil)
+	if code != http.StatusOK || !strings.Contains(string(page), made.Token) || strings.Contains(string(page), "src=\"http") {
+		t.Errorf("share page: %d, token present=%v", code, strings.Contains(string(page), made.Token))
+	}
+	if code, _ := c.do("GET", "/s/bad%22%3E%3Cscript", "", nil); code != http.StatusNotFound {
+		t.Errorf("a token with odd characters must be rejected: %d", code)
+	}
 }

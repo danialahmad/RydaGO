@@ -8,7 +8,7 @@ import 'auth.dart';
 import 'trip.dart';
 import 'user_loc.dart';
 
-enum AddResult { ok, unauthorized, failed }
+enum AddResult { ok, unauthorized, duplicate, rateLimited, failed }
 
 enum VoteResult { ok, unauthorized, ownReport, failed }
 
@@ -53,8 +53,25 @@ class ReportsNotifier extends Notifier<List<Report>> {
       return AddResult.ok;
     } on UnauthorizedException {
       return AddResult.unauthorized;
+    } on DuplicateReportException {
+      return AddResult.duplicate;
+    } on RateLimitedException {
+      return AddResult.rateLimited;
     } catch (_) {
       return AddResult.failed;
+    }
+  }
+
+  /// Takes down one of the user's own reports. Returns false if that failed.
+  Future<bool> deleteMine(Report report) async {
+    final token = ref.read(authProvider)?.token;
+    if (token == null) return false;
+    try {
+      await Api.deleteReport(token: token, reportId: report.id);
+      state = [for (final r in state) if (r.id != report.id) r];
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 

@@ -20,6 +20,21 @@ class OwnReportException implements Exception {
   const OwnReportException();
 }
 
+/// The server refused a report: this user already reported the same thing here.
+class DuplicateReportException implements Exception {
+  const DuplicateReportException();
+}
+
+/// The server says slow down (HTTP 429).
+class RateLimitedException implements Exception {
+  const RateLimitedException();
+}
+
+/// The password given to delete an account was wrong.
+class WrongPasswordException implements Exception {
+  const WrongPasswordException();
+}
+
 /// Everything the app asks the Go API for. See docs/API.md for the endpoints.
 class Api {
   const Api._();
@@ -65,6 +80,8 @@ class Api {
       }),
     );
     if (res.statusCode == 401) throw const UnauthorizedException();
+    if (res.statusCode == 409) throw const DuplicateReportException();
+    if (res.statusCode == 429) throw const RateLimitedException();
     if (res.statusCode != 201) {
       throw Exception('POST /reports ${res.statusCode}');
     }
@@ -77,6 +94,96 @@ class Api {
       subtype: r.subtype,
       mine: true,
     );
+  }
+
+  /// Takes down the signed-in user's own report. A report that is already gone
+  /// (404) counts as done.
+  static Future<void> deleteReport({required String token, required int reportId}) async {
+    final res = await http.delete(
+      Uri.parse('$kApiUrl/reports/$reportId'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    if (res.statusCode == 401) throw const UnauthorizedException();
+    if (res.statusCode != 204 && res.statusCode != 404) {
+      throw Exception('DELETE /reports/$reportId ${res.statusCode}');
+    }
+  }
+
+  // ---- live trip sharing ------------------------------------------------------
+  static Map<String, String> _authJson(String token) =>
+      {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'};
+
+  static Map<String, Object> _shareBody({
+    required String destName,
+    required double destLat,
+    required double destLng,
+    required double lat,
+    required double lng,
+    required int etaMinutes,
+  }) => {
+    'dest_name': destName,
+    'dest_lat': destLat,
+    'dest_lng': destLng,
+    'lat': lat,
+    'lng': lng,
+    'eta_minutes': etaMinutes,
+  };
+
+  /// Starts a live trip link and returns its token.
+  static Future<String> createShare({
+    required String token,
+    required String destName,
+    required double destLat,
+    required double destLng,
+    required double lat,
+    required double lng,
+    required int etaMinutes,
+  }) async {
+    final res = await http.post(
+      Uri.parse('$kApiUrl/shares'),
+      headers: _authJson(token),
+      body: jsonEncode(_shareBody(destName: destName, destLat: destLat, destLng: destLng, lat: lat, lng: lng, etaMinutes: etaMinutes)),
+    );
+    if (res.statusCode == 401) throw const UnauthorizedException();
+    if (res.statusCode != 201) throw Exception('POST /shares ${res.statusCode}');
+    return (jsonDecode(res.body) as Map<String, dynamic>)['token'] as String;
+  }
+
+  static Future<void> updateShare({
+    required String token,
+    required String shareToken,
+    required String destName,
+    required double destLat,
+    required double destLng,
+    required double lat,
+    required double lng,
+    required int etaMinutes,
+  }) async {
+    final res = await http.put(
+      Uri.parse('$kApiUrl/shares/$shareToken'),
+      headers: _authJson(token),
+      body: jsonEncode(_shareBody(destName: destName, destLat: destLat, destLng: destLng, lat: lat, lng: lng, etaMinutes: etaMinutes)),
+    );
+    if (res.statusCode != 204) throw Exception('PUT /shares ${res.statusCode}');
+  }
+
+  static Future<void> endShare({required String token, required String shareToken}) async {
+    await http.delete(
+      Uri.parse('$kApiUrl/shares/$shareToken'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+  }
+
+  /// Deletes the signed-in user's account with all their reports and votes.
+  static Future<void> deleteAccount({required String token, required String password}) async {
+    final res = await http.delete(
+      Uri.parse('$kApiUrl/me'),
+      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      body: jsonEncode({'password': password}),
+    );
+    if (res.statusCode == 401) throw const UnauthorizedException();
+    if (res.statusCode == 403) throw const WrongPasswordException();
+    if (res.statusCode != 204) throw Exception('DELETE /me ${res.statusCode}');
   }
 
   /// "Masih ada?": [stillThere] true = it is still there, false = it is gone.
@@ -107,12 +214,14 @@ class Api {
   static Future<List<RouteOption>> routes(
     LatLng from,
     LatLng to,
-    AppLang lang,
-  ) async {
+    AppLang lang, {
+    bool avoidHighways = false,
+  }) async {
     final res = await http.get(
       Uri.parse(
         '$kApiUrl/route?from=${from.latitude},${from.longitude}'
-        '&to=${to.latitude},${to.longitude}&lang=${lang.code}',
+        '&to=${to.latitude},${to.longitude}&lang=${lang.code}'
+        '${avoidHighways ? '&avoid=highways' : ''}',
       ),
     );
     if (res.statusCode != 200) throw Exception('GET /route ${res.statusCode}');

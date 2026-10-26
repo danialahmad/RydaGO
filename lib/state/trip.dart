@@ -40,7 +40,8 @@ final routesProvider = FutureProvider<List<RouteOption>>((ref) async {
   if (dest == null) return const [];
   // read, not watch: GPS updates must not refetch the routes mid-trip.
   final lang = ref.watch(settingsProvider.select((s) => s.lang));
-  return Api.routes(ref.read(userLocProvider).pos, dest.pos, lang);
+  final avoidHighways = ref.watch(settingsProvider.select((s) => s.avoidHighways));
+  return Api.routes(ref.read(userLocProvider).pos, dest.pos, lang, avoidHighways: avoidHighways);
 });
 
 /// Keeps a stored index inside the list (a route type can be missing if the API

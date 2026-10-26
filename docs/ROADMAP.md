@@ -7,12 +7,9 @@ Susunan ialah cadangan; ubah ikut keperluan. Setiap item ada **bila dikira siap*
 
 Tanpa ini data komuniti tak boleh dipercayai atau tak selamat.
 
-1. **Anti-spam dan keselamatan asas**
-   - Had kadar pada `/auth/*` dan `POST /reports` (per IP dan per pengguna).
-   - Ketatkan CORS kepada asal app. Tukar semua nilai dev (kata laluan, JWT) dalam deploy.
-   - Siap bila: satu pengguna tak boleh hantar >N laporan seminit; ujian membuktikannya.
-2. **Padam akaun dan data** (`DELETE /me`) + skrin dalam Tetapan. Diperlukan kedai app dan PDPA.
-3. **Padam laporan sendiri** dan undi dengan ketuk ikon di peta (undi kini hanya melalui kad "Masih ada?").
+1. **Keselamatan lanjut**
+   - Had kadar kini ada (dalam ingatan, per instans), pengesanan laporan pendua, padam laporan dan padam akaun.
+   - Belum: ketatkan CORS kepada asal app, tukar semua nilai dev (kata laluan, JWT) dalam deploy, had kadar yang dikongsi jika ada lebih satu instans API, undi dengan ketuk ikon di peta.
 
 (Siap: "Masih ada?" dengan undi dan jangka hayat; ujian pangkalan data sebenar dalam `integration_test.go`.)
 

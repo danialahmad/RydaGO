@@ -38,6 +38,7 @@ Map<String, dynamic> _style() => {
     };
 
 void main() {
+  roadStyleTests();
   group('flattenStyle', () {
     test('drops 3D building extrusions and footpaths, and keeps the other layers', () {
       final out = flattenStyle(_style());
@@ -83,5 +84,34 @@ void main() {
     expect(east.longitude - p.longitude, greaterThan(0));
     expect(east.latitude, closeTo(p.latitude, 1e-7));
     expect(haversineM(p, offsetAhead(p, 213, 45)), closeTo(45, 0.5));
+  });
+}
+
+void roadStyleTests() {
+  test('roadColor: white roads, grey casings, warm motorways, dim tunnels', () {
+    expect(roadColor('road_minor'), '#ffffff');
+    expect(roadColor('road_minor_casing'), '#b8bec7');
+    expect(roadColor('road_motorway'), '#ffeeb8');
+    expect(roadColor('road_trunk_primary_casing'), '#d9b44a');
+    expect(roadColor('tunnel_minor'), '#eceef1');
+  });
+
+  test('flattenStyle recolours roads only when asked', () {
+    String? colorOf(Map<String, dynamic> s, String id) => ((s['layers'] as List)
+        .firstWhere((l) => l['id'] == id)['paint'] as Map)['line-color'] as String?;
+    expect(colorOf(flattenStyle(_style()), 'road_minor'), isNull);
+    expect(colorOf(flattenStyle(_style(), recolor: true), 'road_minor'), '#ffffff');
+    expect(colorOf(flattenStyle(_style(), recolor: true), 'road_minor_casing'), '#b8bec7');
+  });
+
+  test('navZoom: closer when slow or near a turn, wider at speed', () {
+    expect(navZoom(0, 1000), 18.0);
+    expect(navZoom(null, 1000), 18.0);
+    expect(navZoom(40, 1000), 18.0);
+    expect(navZoom(70, 1000), 17.3);
+    expect(navZoom(100, 1000), 16.5);
+    expect(navZoom(140, 1000), 16.5); // capped
+    expect(navZoom(100, 200), 17.8); // turn coming up: pull in
+    expect(navZoom(20, 100), 18.0);
   });
 }

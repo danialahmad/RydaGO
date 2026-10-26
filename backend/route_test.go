@@ -128,6 +128,7 @@ func fakeValhalla(t *testing.T, failWhen func(opts map[string]any) bool) (*httpt
 		var req struct {
 			Costing        string                    `json:"costing"`
 			CostingOptions map[string]map[string]any `json:"costing_options"`
+			Alternates     int                       `json:"alternates"`
 		}
 		if err := json.Unmarshal(body, &req); err != nil || req.Costing != "auto" {
 			http.Error(w, "bad request", http.StatusBadRequest)
@@ -141,17 +142,32 @@ func fakeValhalla(t *testing.T, failWhen func(opts map[string]any) bool) (*httpt
 			http.Error(w, "boom", http.StatusInternalServerError)
 			return
 		}
-		json.NewEncoder(w).Encode(map[string]any{"trip": map[string]any{
-			"summary": map[string]any{"time": 600.0, "length": 12.34},
-			"legs": []map[string]any{{
-				"shape": shape,
-				"maneuvers": []map[string]any{
-					{"type": 1, "length": 0.5, "begin_shape_index": 0, "street_names": []string{"Jalan A"}},
-					{"type": 10, "length": 6.0, "begin_shape_index": 1, "street_names": []string{"Jalan B"}, "toll": true},
-					{"type": 4, "length": 0.0, "begin_shape_index": 2},
-				},
-			}},
-		}})
+		// Each costing gives a different route, so none is dropped as a duplicate.
+		time, length := 600.0, 12.34
+		switch {
+		case opts["use_tolls"] == 0.0:
+			time, length = 660, 13.0
+		case opts["shortest"] == true:
+			time, length = 720, 11.0
+		}
+		trip := func(time, length float64, via string) map[string]any {
+			return map[string]any{
+				"summary": map[string]any{"time": time, "length": length},
+				"legs": []map[string]any{{
+					"shape": shape,
+					"maneuvers": []map[string]any{
+						{"type": 1, "length": 0.5, "begin_shape_index": 0, "street_names": []string{"Jalan A"}},
+						{"type": 10, "length": 6.0, "begin_shape_index": 1, "street_names": []string{via}, "toll": true},
+						{"type": 4, "length": 0.0, "begin_shape_index": 2},
+					},
+				}},
+			}
+		}
+		resp := map[string]any{"trip": trip(time, length, "Jalan B")}
+		if req.Alternates > 0 {
+			resp["alternates"] = []map[string]any{{"trip": trip(900, 14.5, "Jalan Alt")}}
+		}
+		json.NewEncoder(w).Encode(resp)
 	}))
 	t.Cleanup(srv.Close)
 	return srv, &seen
@@ -240,7 +256,7 @@ func TestRouteKeepsWorkingVariantsWhenOneFails(t *testing.T) {
 	rec := getRoute(t, "from=3.1,101.7&to=3.2,101.8")
 	var routes []routeOut
 	json.Unmarshal(rec.Body.Bytes(), &routes)
-	if rec.Code != http.StatusOK || len(routes) != 2 {
+	if rec.Code != http.StatusOK || len(routes) != 3 || routes[1].ID == "notoll" { // fastest, shortest, and an alternative fill the gap
 		t.Fatalf("status %d, %d routes: %s", rec.Code, len(routes), rec.Body)
 	}
 }
@@ -352,5 +368,63 @@ func TestManeuverTextEnglish(t *testing.T) {
 	}
 	if got := maneuverText("xx", 15, nil, 0); got != "Turn left" {
 		t.Errorf("unknown language should be English: %q", got)
+	}
+}
+
+func TestPickRoutesDropsDuplicatesAndFillsWithAlternatives(t *testing.T) {
+	fast := routeOut{ID: "fastest", Km: 10, Minutes: 12, Via: "E1"}
+	sameAsFast := routeOut{ID: "notoll", Km: 10, Minutes: 12, Via: "E1"}
+	short := routeOut{ID: "shortest", Km: 9.1, Minutes: 15, Via: "Jalan A"}
+	altSame := routeOut{ID: "alt1", Km: 9.1, Minutes: 15, Via: "Jalan A"}
+	alt := routeOut{ID: "alt2", Km: 11, Minutes: 14, Via: "Jalan B"}
+	alt3 := routeOut{ID: "alt3", Km: 12, Minutes: 18, Via: "Jalan C"}
+
+	got := pickRoutes([]routeOut{fast, sameAsFast, short}, []routeOut{altSame, alt, alt3}, 3)
+	var ids []string
+	for _, r := range got {
+		ids = append(ids, r.ID)
+	}
+	if strings.Join(ids, ",") != "fastest,shortest,alt2" {
+		t.Errorf("ids = %v, want fastest,shortest,alt2 (duplicates dropped, filled to 3)", ids)
+	}
+	if n := len(pickRoutes([]routeOut{fast}, nil, 3)); n != 1 {
+		t.Errorf("a single route stays single, got %d", n)
+	}
+	if got := pickRoutes(nil, nil, 3); got == nil || len(got) != 0 {
+		t.Errorf("no routes should give an empty, non-nil list (JSON []), got %#v", got)
+	}
+}
+
+func TestRouteOffersAlternativesWhenChoicesAreFewer(t *testing.T) {
+	srv, _ := fakeValhalla(t, func(opts map[string]any) bool { return opts["use_tolls"] != nil || opts["shortest"] == true })
+	useValhalla(t, srv.URL)
+
+	var routes []routeOut
+	rec := getRoute(t, "from=3.1,101.7&to=3.2,101.8")
+	if err := json.Unmarshal(rec.Body.Bytes(), &routes); err != nil || rec.Code != 200 {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body)
+	}
+	if len(routes) != 2 || routes[0].ID != "fastest" || routes[1].ID != "alt1" || routes[1].Label != "Alternative" || routes[1].Via != "Jalan Alt" {
+		t.Errorf("want fastest + alt1 from Valhalla's alternates, got %+v", routes)
+	}
+}
+
+func TestAvoidOptionsReachValhalla(t *testing.T) {
+	if got := avoidOpts("highways, ferries ,nonsense"); got["use_highways"] != 0.0 || got["use_ferry"] != 0.0 || len(got) != 2 {
+		t.Errorf("avoidOpts = %v", got)
+	}
+	if len(avoidOpts("")) != 0 {
+		t.Error("no avoid list should add no options")
+	}
+
+	srv, seen := fakeValhalla(t, nil)
+	useValhalla(t, srv.URL)
+	if rec := getRoute(t, "from=3.1,101.7&to=3.2,101.8&avoid=highways"); rec.Code != http.StatusOK {
+		t.Fatalf("status %d", rec.Code)
+	}
+	for _, opts := range *seen {
+		if opts["use_highways"] != 0.0 {
+			t.Errorf("a variant ignored the avoid list: %v", opts)
+		}
 	}
 }

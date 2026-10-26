@@ -54,6 +54,7 @@ users   (id, email UNIQUE, password_hash, created_at)
 reports (id, type, subtype NULL, geom GEOGRAPHY(Point,4326), user_id -> users, created_at)
          indeks GIST pada geom, indeks pada created_at
 report_votes (report_id, user_id, vote +1/-1, PRIMARY KEY (report_id, user_id))
+shares (token PK, user_id, dest_*, lat/lng, eta_at, updated_at, ended_at)  -- kongsi perjalanan langsung
 ```
 
 Laporan dibaca dengan `ST_DWithin`. Ia sah selagi umur (sejak dibuat atau undi naik terkini) < 2 jam, dan
@@ -167,7 +168,7 @@ sepanjang laluan, supaya logik di atas diuji tanpa memandu. `NavNotifier` tak ta
 
 - **CORS dibuka kepada `*`** (`cors` dalam `main.go`). Ketatkan sebelum deploy.
 - Nilai dev dalam compose (`wazedev`, JWT dev) ialah **awam**. Tetapkan nilai sebenar dalam `.env`.
-- Tiada had kadar (rate limit) pada `/auth/*` dan `/reports`.
+- Had kadar ialah dalam ingatan (`ratelimit.go`): ia ditetapkan semula bila API dimulakan semula dan tidak dikongsi antara instans.
 - Tiada ujian yang menyentuh pangkalan data sebenar (daftar, log masuk, simpan/baca laporan).
 - Tiada ujian widget/skrin Flutter, hanya ujian logik.
 - `web/index.html` ada skrip kecil yang meruntuhkan kredit peta pada permulaan. Ia bergantung pada nama kelas CSS

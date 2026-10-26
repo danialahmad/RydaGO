@@ -248,6 +248,7 @@ class NavNotifier extends Notifier<NavState?> {
         from,
         dest.pos,
         ref.read(settingsProvider).lang,
+        avoidHighways: ref.read(settingsProvider).avoidHighways,
       );
       final current = state;
       if (current == null || current.arrived || routes.isEmpty) return;

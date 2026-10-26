@@ -6,11 +6,13 @@ import '../../app/format.dart';
 import '../../app/strings.dart';
 import '../../app/theme.dart';
 import '../../models/report.dart';
+import '../../models/route.dart';
 import '../../state/auth.dart';
 import '../../state/demo.dart';
 import '../../state/navigation.dart';
 import '../../state/reports.dart';
 import '../../state/settings.dart';
+import '../../state/share.dart';
 import '../../state/trip.dart';
 import 'map_buttons.dart';
 
@@ -86,6 +88,13 @@ class NavBanner extends ConsumerWidget {
       line = m.street.isNotEmpty ? m.street : m.text;
     }
     final then = (nav.rerouting || nav.arrived) ? null : nav.then;
+    // The road sign for this turn: "Exit 3310A · Gombak / Batu Caves".
+    final signText = (nav.rerouting || nav.arrived)
+        ? ''
+        : [
+            if (m.exit.isNotEmpty) s.exitLabel(m.exit),
+            if (m.toward.isNotEmpty) m.toward,
+          ].join(' · ');
 
     return Material(
       color: AppColors.banner,
@@ -127,6 +136,25 @@ class NavBanner extends ConsumerWidget {
                         fontWeight: FontWeight.w800,
                       ),
                     ),
+                    if (signText.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 3),
+                        child: Text(
+                          signText,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    if (m.lanes.isNotEmpty && !nav.rerouting && !nav.arrived)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: LaneStrip(lanes: m.lanes),
+                      ),
                   ],
                 ),
               ),
@@ -165,6 +193,56 @@ class NavBanner extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Icon for one lane direction from the API (left, slight_right, straight ...).
+IconData laneIcon(String dir) => switch (dir) {
+  'left' => Icons.turn_left,
+  'sharp_left' => Icons.turn_sharp_left,
+  'slight_left' => Icons.turn_slight_left,
+  'right' => Icons.turn_right,
+  'sharp_right' => Icons.turn_sharp_right,
+  'slight_right' => Icons.turn_slight_right,
+  'reverse' => Icons.u_turn_left,
+  _ => Icons.straight,
+};
+
+/// The lanes at the next maneuver, drawn as small boxes: the lanes to use are
+/// bright, the best one is outlined, the others are dimmed.
+class LaneStrip extends StatelessWidget {
+  const LaneStrip({super.key, required this.lanes});
+  final List<Lane> lanes;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      for (final l in lanes)
+        Container(
+          margin: const EdgeInsets.only(right: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: l.valid ? 0.22 : 0.06),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: l.active ? const Color(0xFF7FD6FF) : Colors.transparent,
+              width: 2,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final d in l.dirs)
+                Icon(
+                  laneIcon(d),
+                  size: 20,
+                  color: l.valid ? Colors.white : Colors.white38,
+                ),
+            ],
+          ),
+        ),
+    ],
+  );
 }
 
 /// Round speedometer in the corner while driving, with the posted speed limit
@@ -435,6 +513,7 @@ class _NavBottomBarState extends ConsumerState<NavBottomBar> {
     if (nav == null) return const SizedBox.shrink();
     final dest = ref.watch(destinationProvider);
     final voiceOn = ref.watch(settingsProvider.select((s) => s.voiceOn));
+    final sharing = ref.watch(shareProvider) != null;
     final arrival = formatClock(
       DateTime.now().add(Duration(minutes: nav.remainingMin)),
       s,
@@ -576,18 +655,32 @@ class _NavBottomBarState extends ConsumerState<NavBottomBar> {
               children: [
                 Expanded(
                   child: _Action(
-                    icon: Icons.ios_share_rounded,
-                    label: s.shareEta,
+                    icon: sharing
+                        ? Icons.share_location_rounded
+                        : Icons.ios_share_rounded,
+                    label: sharing ? s.stopSharing : s.shareEta,
+                    color: sharing ? AppColors.go : null,
                     onTap: () async {
-                      final text = s.etaText(
-                        dest?.name ?? s.destination,
-                        arrival,
-                      );
-                      await Clipboard.setData(ClipboardData(text: text));
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context)
-                            .showSnackBar(SnackBar(content: Text(s.etaCopied)));
+                      final messenger = ScaffoldMessenger.of(context);
+                      final name = dest?.name ?? s.destination;
+                      if (sharing) {
+                        await ref.read(shareProvider.notifier).end();
+                        return;
                       }
+                      // Signed in: a live link friends can follow. Otherwise a one-off text.
+                      final signedIn = ref.read(authProvider) != null;
+                      final link = signedIn
+                          ? await ref.read(shareProvider.notifier).start()
+                          : null;
+                      final text = link != null
+                          ? s.liveText(name, link)
+                          : s.etaText(name, arrival);
+                      await Clipboard.setData(ClipboardData(text: text));
+                      messenger.showSnackBar(SnackBar(
+                        content: Text(link != null
+                            ? s.liveCopied(link)
+                            : (signedIn ? s.liveFailed : s.etaCopied)),
+                      ));
                     },
                   ),
                 ),

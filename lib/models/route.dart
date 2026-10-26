@@ -2,7 +2,16 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 
 /// One step of a route: "turn right onto Jalan B".
 class Maneuver {
-  const Maneuver(this.text, this.type, this.km, this.index, {this.street = ''});
+  const Maneuver(
+    this.text,
+    this.type,
+    this.km,
+    this.index, {
+    this.street = '',
+    this.exit = '',
+    this.toward = '',
+    this.lanes = const [],
+  });
 
   final String
   text; // full instruction in the app language, also what the voice says
@@ -11,6 +20,9 @@ class Maneuver {
   final int type; // Valhalla maneuver type, mapped to an icon in the UI
   final double km;
   final int index; // index into RouteOption.points where this step begins
+  final String exit; // exit number on the road sign, e.g. "3310A" ('' if none)
+  final String toward; // destinations on the sign, e.g. "Gombak / Batu Caves"
+  final List<Lane> lanes; // only where OpenStreetMap has lane data
 
   static Maneuver fromJson(Map<String, dynamic> j) => Maneuver(
     j['text'] as String,
@@ -18,6 +30,28 @@ class Maneuver {
     (j['km'] as num).toDouble(),
     j['index'] as int,
     street: (j['street'] as String?) ?? '',
+    exit: (j['exit'] as String?) ?? '',
+    toward: (j['toward'] as String?) ?? '',
+    lanes: [
+      for (final l in (j['lanes'] as List? ?? const []))
+        Lane.fromJson(l as Map<String, dynamic>),
+    ],
+  );
+}
+
+/// One lane at a maneuver: where it leads, whether it can make the maneuver, and
+/// whether it is the best one to be in.
+class Lane {
+  const Lane(this.dirs, {this.valid = false, this.active = false});
+
+  final List<String> dirs; // left, slight_left, straight, slight_right, right ...
+  final bool valid;
+  final bool active;
+
+  static Lane fromJson(Map<String, dynamic> j) => Lane(
+    [for (final d in (j['dirs'] as List? ?? const [])) d as String],
+    valid: (j['valid'] as bool?) ?? false,
+    active: (j['active'] as bool?) ?? false,
   );
 }
 

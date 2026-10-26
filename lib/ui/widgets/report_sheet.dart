@@ -63,6 +63,10 @@ class _ReportSheetState extends ConsumerState<ReportSheet> {
         await ref.read(authProvider.notifier).logout();
         messenger.showSnackBar(SnackBar(content: Text(s.sessionExpiredReport)));
         nav.push(MaterialPageRoute(builder: (_) => const LoginScreen()));
+      case AddResult.duplicate:
+        messenger.showSnackBar(SnackBar(content: Text(s.reportDuplicate)));
+      case AddResult.rateLimited:
+        messenger.showSnackBar(SnackBar(content: Text(s.reportRateLimited)));
       case AddResult.failed:
         messenger.showSnackBar(SnackBar(content: Text(s.reportFailed)));
     }

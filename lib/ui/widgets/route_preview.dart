@@ -5,6 +5,8 @@ import '../../app/format.dart';
 import '../../app/strings.dart';
 import '../../app/theme.dart';
 import '../../models/route.dart';
+import '../../models/route_summary.dart';
+import '../../state/reports.dart';
 import '../../state/navigation.dart';
 import '../../state/settings.dart';
 import '../../state/trip.dart';
@@ -126,6 +128,8 @@ class RoutePreviewPanel extends ConsumerWidget {
                 extraMin: routes[i].minutes - routes[fastest].minutes,
                 onTap: () => ref.read(routeIndexProvider.notifier).set(i),
               ),
+          if (!async.isLoading && !async.hasError && routes.isNotEmpty)
+            _RouteSummary(route: routes[selected]),
           const SizedBox(height: 12),
           FilledButton.icon(
             style: FilledButton.styleFrom(backgroundColor: AppColors.go),
@@ -287,4 +291,57 @@ class _Tag extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// What to expect on the selected route: the road reports lying on it (cameras,
+/// police, accidents ...), so the driver knows before setting off.
+class _RouteSummary extends ConsumerWidget {
+  const _RouteSummary({required this.route});
+  final RouteOption route;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = S.of(context);
+    final counts = reportsOnRoute(route, ref.watch(reportsProvider));
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text(
+            s.onThisRoute,
+            style: const TextStyle(
+              color: AppColors.muted,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+          ),
+          if (counts.isEmpty)
+            Text(s.nothingReported, style: const TextStyle(fontSize: 13)),
+          for (final e in counts.entries)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: e.key.color.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(e.key.icon, size: 16, color: e.key.color),
+                const SizedBox(width: 4),
+                Text(
+                  '${e.key.localLabel(s)} × ${e.value}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                    color: e.key.color,
+                  ),
+                ),
+              ]),
+            ),
+        ],
+      ),
+    );
+  }
 }

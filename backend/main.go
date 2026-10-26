@@ -56,6 +56,9 @@ type server struct {
 	db        *pgxpool.Pool
 	jwtSecret []byte
 	dummyHash []byte // compared against when the email is unknown, to even out login timing
+	// relaxLimits lifts the per-user report and vote limits. Tests that file many
+	// reports as one user set it; the auth limit always applies.
+	relaxLimits bool
 }
 
 type report struct {
@@ -75,6 +78,10 @@ type report struct {
 const (
 	reportLifetime = "2 hours" // a Postgres interval literal
 	hideNetDown    = 3
+
+	// The same user reporting the same type within this distance and time is a duplicate.
+	duplicateWindow  = "10 minutes" // a Postgres interval literal
+	duplicateRadiusM = 100.0
 )
 
 func main() {
@@ -114,11 +121,28 @@ func (s *server) routes() http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID, middleware.Logger, middleware.Recoverer, cors)
 	r.Get("/health", s.health)
-	r.Post("/auth/register", s.register)
-	r.Post("/auth/login", s.login)
-	r.With(s.requireAuth).Post("/reports", s.createReport)
+	// Limits are per client IP for the open auth endpoints, per user for the rest.
+	authLimit := limit(newLimiter(10, 10), clientIP)
+	reportLimit := limit(newLimiter(6, 5), userKey)
+	voteLimit := limit(newLimiter(60, 30), userKey)
+	if s.relaxLimits {
+		reportLimit = limit(newLimiter(60000, 10000), userKey)
+		voteLimit = reportLimit
+	}
+	r.With(authLimit).Post("/auth/register", s.register)
+	r.With(authLimit).Post("/auth/login", s.login)
+	r.With(s.requireAuth, reportLimit).Post("/reports", s.createReport)
 	r.Get("/reports", s.nearbyReports)
-	r.With(s.requireAuth).Post("/reports/{id}/vote", s.voteReport)
+	r.With(s.requireAuth, voteLimit).Post("/reports/{id}/vote", s.voteReport)
+	r.With(s.requireAuth).Delete("/reports/{id}", s.deleteReport)
+	r.With(s.requireAuth, authLimit).Delete("/me", s.deleteAccount)
+	// Live trip sharing: the owner manages a share; anyone with the link may read it.
+	shareLimit := limit(newLimiter(60, 20), userKey)
+	r.With(s.requireAuth, shareLimit).Post("/shares", s.createShare)
+	r.With(s.requireAuth, shareLimit).Put("/shares/{token}", s.updateShare)
+	r.With(s.requireAuth, shareLimit).Delete("/shares/{token}", s.endShare)
+	r.With(limit(newLimiter(120, 60), clientIP)).Get("/shares/{token}", s.getShare)
+	r.Get("/s/{token}", s.sharePage)
 	r.Get("/route", s.route)
 	r.Get("/places", s.places)
 	return r
@@ -129,7 +153,7 @@ func (s *server) routes() http.Handler {
 func cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -185,6 +209,23 @@ func (s *server) createReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userID, _ := r.Context().Value(userCtxKey{}).(int64)
+	// The same person reporting the same thing in the same place again is a double
+	// tap or a spammer, not new information.
+	var dup bool
+	if err := s.db.QueryRow(r.Context(),
+		`SELECT EXISTS (SELECT 1 FROM reports
+		   WHERE user_id = $1 AND type = $2
+		     AND created_at > now() - interval '`+duplicateWindow+`'
+		     AND ST_DWithin(geom, ST_SetSRID(ST_MakePoint($3, $4), 4326)::geography, $5))`,
+		userID, in.Type, in.Lng, in.Lat, duplicateRadiusM).Scan(&dup); err != nil {
+		log.Printf("duplicate check: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	if dup {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "you already reported this here"})
+		return
+	}
 	rep := report{Type: in.Type, Subtype: in.Subtype, Lat: in.Lat, Lng: in.Lng}
 	err := s.db.QueryRow(r.Context(),
 		`INSERT INTO reports (type, subtype, geom, user_id)
