@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/strings.dart';
+import '../../state/alternatives.dart';
 import '../../state/demo.dart';
 import '../../state/trip.dart';
 import '../../state/user_loc.dart';
 import '../../state/voice.dart';
 import '../map/map_view.dart';
+import '../widgets/alternatives_ui.dart';
 import '../widgets/home_panel.dart';
 import '../widgets/map_buttons.dart';
 import '../widgets/measure_size.dart';
@@ -25,6 +27,7 @@ class MapScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(demoDriverProvider); // keeps the demo driver alive
     ref.watch(voiceGuideProvider); // keeps spoken instructions alive
+    ref.watch(alternativesProvider.select((_) => 0)); // keeps the detour check running
     final navigating = ref.watch(navigatingProvider);
     final dest = ref.watch(destinationProvider);
     final pin = ref.watch(pinProvider);
@@ -66,6 +69,8 @@ class MapScreen extends ConsumerWidget {
                     child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       const Expanded(
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          RerouteSuggestion(),
+                          SizedBox(height: 8),
                           NearbyReportPill(),
                           SizedBox(height: 8),
                           ReportPrompt(),

@@ -188,6 +188,22 @@ class NavNotifier extends Notifier<NavState?> {
 
   void stop() => state = null;
 
+  /// Carries on along [r], a route found from where we are now (the driver took
+  /// a suggested or chosen alternative). Progress starts again from its beginning.
+  void switchTo(RouteOption r) {
+    final here = state?.pos ?? r.points.first;
+    _offCount = 0;
+    _lastReroute = DateTime.now();
+    state = NavState(
+      route: r,
+      cum: routeCumulative(r.points),
+      alongM: 0,
+      pos: here,
+      speedKmh: state?.speedKmh,
+      heading: state?.heading,
+    );
+  }
+
   void _onFix(UserLoc loc) {
     final s = state;
     if (s == null || s.arrived || !loc.isReal) return;

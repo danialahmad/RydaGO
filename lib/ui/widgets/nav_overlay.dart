@@ -14,6 +14,7 @@ import '../../state/reports.dart';
 import '../../state/settings.dart';
 import '../../state/share.dart';
 import '../../state/trip.dart';
+import 'alternatives_ui.dart';
 import 'map_buttons.dart';
 
 /// Icon for a Valhalla maneuver type (https://valhalla.github.io/valhalla/api/turn-by-turn/api-reference/).
@@ -566,7 +567,8 @@ class _NavBottomBarState extends ConsumerState<NavBottomBar> {
         children: [
           InkWell(
             borderRadius: BorderRadius.circular(16),
-            onTap: () => setState(() => _expanded = !_expanded),
+            // Tapping the bar shows the other ways to go; the arrow opens the actions.
+            onTap: () => showRoutesSheet(context, ref),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 4),
               child: Row(
@@ -594,12 +596,21 @@ class _NavBottomBarState extends ConsumerState<NavBottomBar> {
                       ],
                     ),
                   ),
-                  Icon(
-                    _expanded
-                        ? Icons.expand_more_rounded
-                        : Icons.expand_less_rounded,
-                    size: 32,
+                  const Icon(
+                    Icons.alt_route_rounded,
+                    size: 26,
                     color: AppColors.muted,
+                  ),
+                  IconButton(
+                    tooltip: s.moreActions,
+                    onPressed: () => setState(() => _expanded = !_expanded),
+                    icon: Icon(
+                      _expanded
+                          ? Icons.expand_more_rounded
+                          : Icons.expand_less_rounded,
+                      size: 32,
+                      color: AppColors.muted,
+                    ),
                   ),
                 ],
               ),

@@ -151,6 +151,16 @@ class S {
     "I'll arrive at $dest at $time.",
     'Saya akan sampai di $dest pada $time.',
   );
+  String get moreActions => _t('More', 'Lagi');
+  String betterRouteVoice(int min) => _t('Faster route found. Saves $min minutes. Switch?', 'Laluan lebih pantas dijumpai. Jimat $min minit. Tukar?');
+  String get fasterRoute => _t('Faster route found', 'Laluan lebih pantas dijumpai');
+  String saves(int min) => _t('Saves $min min', 'Jimat $min min');
+  String slowerBy(int min) => _t('$min min slower', 'Lambat $min min');
+  String get routesFromHere => _t('Routes from here', 'Laluan dari sini');
+  String get currentRoute => _t('Current route', 'Laluan semasa');
+  String get noOtherRoutes => _t('No other routes found.', 'Tiada laluan lain dijumpai.');
+  String delaysOnRoute(int min) => _t('+$min min from reports', '+$min min daripada laporan');
+  String get stuckInTraffic => _t('Looks like traffic. Checking other routes...', 'Nampaknya sesak. Menyemak laluan lain...');
   String get shareLive => _t('Share live trip', 'Kongsi perjalanan langsung');
   String get stopSharing => _t('Stop sharing', 'Henti kongsi');
   String liveCopied(String link) => _t('Live link copied: friends can follow your trip. $link', 'Pautan langsung disalin: kawan boleh ikut perjalanan anda. $link');

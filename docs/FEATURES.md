@@ -61,6 +61,8 @@ Lajur "Perlu" menyebut apa yang perlu disediakan (backend, data, atau platform).
 | Papan tanda keluar (nombor keluar dan "ke") | ✅ | | Dalam banner belokan, dari data Valhalla |
 | Panduan lorong | 🟡 | | UI dan API siap, tetapi OSM jarang ada tag lorong di Malaysia jadi biasanya tiada |
 | Zum ikut kelajuan dan jarak ke belokan | ✅ | | `navZoom` dalam `models/geo.dart` |
+| Cadangan laluan lebih pantas semasa memandu (Ya / Tidak) | 🟡 | | `state/alternatives.dart`. Semak setiap 45 s (30 s bila tersekat >1 min), cadangkan bila jimat ≥3 min, "Tidak" senyap 10 min. Tiada trafik langsung: kelewatan dianggar daripada laporan jem/kemalangan/jalan tutup di laluan (`routeDelayMin`) dan standstill sendiri (+5 min) |
+| Ketuk bar bawah: laluan lain dari lokasi semasa | ✅ | | Senarai dengan "jimat X min" / "lambat X min"; ketuk untuk tukar. Anak panah di kanan membuka tindakan (kongsi, senyap, tamat) |
 | Peta rata, jalan tebal, tiada bangunan 3D | ✅ | | `services/map_style.dart` |
 | Ringkasan sebelum Start (laporan di laluan) | ✅ | | Kad laluan: kamera, polis, kemalangan di sepanjang laluan |
 | Laluan alternatif sebenar | ✅ | | Sehingga 3 laluan berbeza; pendua digugurkan |
