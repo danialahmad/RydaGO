@@ -19,13 +19,18 @@ bool _isRoad(Map<String, dynamic> l) {
 }
 
 /// Turns an OpenFreeMap style into a flat, road-first one for driving: no 3D
-/// building extrusions (they tower over the road) and thicker roads.
+/// building extrusions (they tower over the road), no footpaths, thicker roads.
 /// Works on the decoded style JSON and returns a changed copy.
 Map<String, dynamic> flattenStyle(Map<String, dynamic> style,
     {double roadScale = kRoadWidthScale}) {
   final out = jsonDecode(jsonEncode(style)) as Map<String, dynamic>;
   final layers = (out['layers'] as List).cast<Map<String, dynamic>>();
-  layers.removeWhere((l) => l['type'] == 'fill-extrusion');
+  // No 3D buildings (they tower over the road) and no footpath lines (dotted clutter).
+  layers.removeWhere((l) =>
+      l['type'] == 'fill-extrusion' ||
+      (l['source-layer'] == 'transportation' &&
+          _roadLayer.hasMatch(l['id'] as String? ?? '') &&
+          (l['id'] as String).contains('path')));
   for (final l in layers) {
     if (!_isRoad(l)) continue;
     final paint = l['paint'] as Map<String, dynamic>?;

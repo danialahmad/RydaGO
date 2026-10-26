@@ -27,13 +27,19 @@ Map<String, dynamic> _style() => {
           'source-layer': 'transportation',
           'paint': {'line-width': 2},
         },
+        {
+          'id': 'road_path_pedestrian',
+          'type': 'line',
+          'source-layer': 'transportation',
+          'paint': {'line-width': 1},
+        },
         {'id': 'water', 'type': 'fill', 'source-layer': 'water', 'paint': {}},
       ],
     };
 
 void main() {
   group('flattenStyle', () {
-    test('drops 3D building extrusions and keeps the other layers', () {
+    test('drops 3D building extrusions and footpaths, and keeps the other layers', () {
       final out = flattenStyle(_style());
       final ids = (out['layers'] as List).map((l) => l['id']).toList();
       expect(ids, ['road_minor', 'road_minor_casing', 'road_major_rail', 'water']);
@@ -53,7 +59,7 @@ void main() {
       final layers = {for (final l in out['layers'] as List) l['id']: l};
       expect(layers['road_major_rail']['paint']['line-width'], 2);
       expect(layers['water']['paint'], isEmpty);
-      expect((input['layers'] as List).length, 5); // original untouched
+      expect((input['layers'] as List).length, 6); // original untouched
     });
   });
 

@@ -22,7 +22,8 @@ RUN flutter pub get
 COPY analysis_options.yaml ./
 COPY lib ./lib
 COPY web ./web
-RUN flutter build web --release
+# No service worker: it kept serving the previous build until a second reload.
+RUN flutter build web --release --pwa-strategy=none
 
 FROM nginx:1.27-alpine
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
