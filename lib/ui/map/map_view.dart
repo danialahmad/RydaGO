@@ -11,6 +11,7 @@ import '../../models/geo.dart';
 import '../../models/report.dart';
 import '../../models/route.dart';
 import '../../models/user_loc.dart';
+import '../../services/map_style.dart';
 import '../../state/navigation.dart';
 import '../../state/reports.dart';
 import '../../state/trip.dart';
@@ -29,6 +30,16 @@ class MapView extends ConsumerStatefulWidget {
   ConsumerState<MapView> createState() => _MapViewState();
 }
 
+/// Camera tilt while driving: 0 = flat top-down, heading-up, like Waze. A tilted
+/// 3D view makes it hard to see which lane or exit is meant.
+const kNavTilt = 0.0;
+
+/// Zoom while driving, close enough to read lanes and junctions (17 was too wide).
+const kNavZoom = 18.0;
+
+/// The dot sits in the lower part of the screen, with more road ahead than behind.
+const kNavAheadM = 45.0;
+
 class _MapViewState extends ConsumerState<MapView> {
   MapLibreMapController? _controller;
   bool _styleReady = false;
@@ -46,12 +57,29 @@ class _MapViewState extends ConsumerState<MapView> {
   bool _centeredOnFix = false;
   double _bearing = 0;
   String? _initialStyle;
+  String? _lightStyle; // flattened style JSON, or the plain URL if it could not be fetched
+  String? _darkStyle;
   bool? _appliedDark;
   Size _viewSize = Size.zero;
   Timer? _fitTimer;
 
   /// Kept clear at the top when framing a route: the menu button and GPS chip.
   static const _kTopClearPx = 76.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStyles();
+  }
+
+  Future<void> _loadStyles() async {
+    final both = await Future.wait([loadFlatStyle(kMapStyleLight), loadFlatStyle(kMapStyleDark)]);
+    if (!mounted) return;
+    setState(() {
+      _lightStyle = both[0] ?? kMapStyleLight;
+      _darkStyle = both[1] ?? kMapStyleDark;
+    });
+  }
 
   @override
   void dispose() {
@@ -229,7 +257,11 @@ class _MapViewState extends ConsumerState<MapView> {
     if (c == null) return;
     if ((n.speedKmh ?? 0) > 5 && n.heading != null) _bearing = n.heading!;
     final camera = CameraUpdate.newCameraPosition(
-        CameraPosition(target: n.pos, zoom: 17, bearing: _bearing, tilt: 45));
+        CameraPosition(
+            target: offsetAhead(n.pos, _bearing, kNavAheadM),
+            zoom: kNavZoom,
+            bearing: _bearing,
+            tilt: kNavTilt));
     try {
       // On web animateCamera is a flyTo, which dips the zoom on its way: every
       // fix pulled the map just under zoom 17, swapping tile levels, and it
@@ -357,7 +389,10 @@ class _MapViewState extends ConsumerState<MapView> {
       _sync();
       if (nav) {
         _controller?.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(
-            target: _userPos, zoom: 17, bearing: _bearing, tilt: 45)));
+            target: offsetAhead(_userPos, _bearing, kNavAheadM),
+            zoom: kNavZoom,
+            bearing: _bearing,
+            tilt: kNavTilt)));
       } else {
         _bearing = 0;
         _scheduleFit();
@@ -368,11 +403,13 @@ class _MapViewState extends ConsumerState<MapView> {
     // setStyle, because changing the widget's style makes the plugin reset its
     // other options (it moves the map credit back over our bottom panel).
     final dark = Theme.of(context).brightness == Brightness.dark;
-    _initialStyle ??= dark ? kMapStyleDark : kMapStyleLight;
+    final light = _lightStyle, darkStyle = _darkStyle;
+    if (light == null || darkStyle == null) return const SizedBox.expand(); // style still loading
+    _initialStyle ??= dark ? darkStyle : light;
     if (_appliedDark != null && _appliedDark != dark) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _styleReady = false;
-        _controller?.setStyle(dark ? kMapStyleDark : kMapStyleLight);
+        _controller?.setStyle(dark ? darkStyle : light);
       });
     }
     _appliedDark = dark;

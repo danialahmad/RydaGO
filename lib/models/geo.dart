@@ -147,3 +147,15 @@ RouteProjection projectOnRoute(
   return best ??
       projectOnRoute(p, pts, cum, fromSeg: fromSeg, toSeg: toSeg);
 }
+
+/// The point [metres] from [from] in direction [bearingDeg] (0 = north, clockwise).
+/// Flat-earth maths, plenty accurate over a few hundred metres.
+LatLng offsetAhead(LatLng from, double bearingDeg, double metres) {
+  const mLat = 110540.0;
+  final mLng = 111320.0 * math.cos(from.latitude * math.pi / 180);
+  final b = bearingDeg * math.pi / 180;
+  return LatLng(
+    from.latitude + metres * math.cos(b) / mLat,
+    from.longitude + metres * math.sin(b) / mLng,
+  );
+}
