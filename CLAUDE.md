@@ -1,7 +1,7 @@
 # Arahan untuk pembantu AI
 
 Projek: app navigasi komuniti (Flutter web/mobile + API Go + Valhalla + Nominatim + PostGIS), Malaysia.
-Mulakan dengan `README.md`, kemudian `docs/ARCHITECTURE.md` dan `docs/DEVELOPMENT.md`.
+Mulakan dengan `README.md`, kemudian `docs/ARCHITECTURE.md` dan `docs/DEVELOPMENT.md`..
 Senarai ciri dan keutamaan: `docs/FEATURES.md`, `docs/ROADMAP.md`.
 
 ## Perintah
