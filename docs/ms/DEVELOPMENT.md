@@ -1,6 +1,8 @@
 # Panduan pembangunan
 
-Cara kerja harian. Untuk cara **menjalankan** projek buat kali pertama, lihat `README.md`.
+[English](../en/DEVELOPMENT.md) · **Bahasa Melayu**
+
+Cara kerja harian. Untuk cara **menjalankan** projek buat kali pertama, lihat [`README.ms.md`](../../README.ms.md).
 
 ## Dua cara menjalankan app
 
@@ -88,7 +90,7 @@ Pada Chrome desktop, DevTools > Sensors membolehkan menetapkan lokasi sendiri.
 ## Mod demo
 
 Tetapan > Pembangun > **Mod demo pemanduan**. Lokasi palsu bergerak di sepanjang laluan pada ~50 km/j
-masa sebenar (laju yang dipercepat membuatkan suara bertindih dan kamera melompat) dan melalui saluran GPS yang sama (lihat `docs/ARCHITECTURE.md`). Dalam navigasi, kembangkan bar bawah:
+masa sebenar (laju yang dipercepat membuatkan suara bertindih dan kamera melompat) dan melalui saluran GPS yang sama (lihat `docs/ms/ARCHITECTURE.md`). Dalam navigasi, kembangkan bar bawah:
 butang **Lencong (demo)** melompatkan kedudukan ~270 m dari laluan untuk menunjukkan re-route.
 Berguna untuk demonstrasi dan untuk menguji UI navigasi tanpa memandu.
 
@@ -96,11 +98,11 @@ Berguna untuk demonstrasi dan untuk menguji UI navigasi tanpa memandu.
 
 ### Jenis atau subjenis laporan baru
 
-Sentuh **tiga** tempat (ujian di dua sisi akan gagal kalau terlupa satu):
+Sentuh **tiga** tempat (dokumen API ada dalam dua bahasa; ujian di dua sisi akan gagal kalau terlupa satu):
 
 1. `backend/main.go`: tambah dalam `reportSubtypes`.
 2. `lib/models/report.dart`: tambah dalam enum `ReportType` (label, ikon, warna, subjenis).
-3. `docs/API.md`: kemas kini jadual.
+3. `docs/en/API.md` dan `docs/ms/API.md`: kemas kini jadual dalam kedua-dua bahasa.
 4. Kemas kini senarai jangkaan dalam `test/logic_test.dart` ("report types") dan `backend/main_test.go`.
 
 Tiada migrasi diperlukan: `type` dan `subtype` ialah `TEXT` yang disahkan dalam kod Go.
@@ -110,7 +112,7 @@ Tiada migrasi diperlukan: `type` dan `subtype` ialah `TEXT` yang disahkan dalam 
 1. Tulis pengendali dalam `backend/` dan daftar dalam `main()` (`r.Get(...)` atau `r.With(s.requireAuth).Post(...)`).
 2. Tambah ujian `httptest`. Untuk pergantungan luar, ikut corak `fakeValhalla` / `fakeNominatim`.
 3. Tambah kaedah dalam `lib/services/api.dart` (semua panggilan HTTP di sini sahaja).
-4. Dokumenkan dalam `docs/API.md`.
+4. Dokumenkan dalam `docs/en/API.md` dan `docs/ms/API.md`.
 
 ### Perubahan pangkalan data
 
@@ -120,7 +122,7 @@ yang sudah dijalankan; tambah yang baru.
 
 ### Skrin atau panel UI baru
 
-Ikut `docs/DESIGN.md`. Letak widget dalam `lib/ui/widgets/` (panel dalam peta) atau `lib/ui/screens/`
+Ikut `docs/ms/DESIGN.md`. Letak widget dalam `lib/ui/widgets/` (panel dalam peta) atau `lib/ui/screens/`
 (halaman penuh). Keadaan baru → `lib/state/`; jangan letak logik dalam widget.
 
 ## Perangkap yang pernah memakan masa
@@ -145,4 +147,5 @@ Ikut `docs/DESIGN.md`. Letak widget dalam `lib/ui/widgets/` (panel dalam peta) a
 - Go: `gofmt`, `go vet`, ralat dikendalikan, tiada rahsia dalam kod.
 - Komen menerangkan **kenapa**, bukan apa. Kod dan komen dalam bahasa yang sama dengan fail sedia ada
   (komen Inggeris di kebanyakan fail, teks UI dalam `strings.dart`: English dan Melayu).
+- Dokumen ada dalam English (`docs/en/`) dan Melayu (`docs/ms/`). Bila mengubah satu, kemas kini yang lain dalam commit yang sama.
 - Commit kecil dan bermakna. Jangan commit `.env`, `data/`, `build/`.

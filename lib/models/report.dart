@@ -15,7 +15,7 @@ class ReportSubtype {
 }
 
 /// The kinds of report a driver can make. [name] and each subtype key must match
-/// the API (`reportSubtypes` in backend/main.go, documented in docs/API.md).
+/// the API (`reportSubtypes` in backend/main.go, documented in docs/en/API.md and docs/ms/API.md).
 enum ReportType {
   police('Police', Icons.local_police, Color(0xFF3F51B5), [
     ReportSubtype('visible', 'Visible'),

@@ -1,5 +1,7 @@
 # RydaGO
 
+**English** · [Bahasa Melayu](README.ms.md)
+
 A community navigation app for Malaysia, built on open data and fully self-hosted.
 
 - **Navigation** with turn-by-turn directions, three route options, speed limits, speeding alerts and estimated toll prices
@@ -78,21 +80,21 @@ Long-press the map (on web: double-click) to drop a pin, then choose Go or Repor
 
 ### From a phone (same Wi-Fi)
 
-See `docs/DEVELOPMENT.md` ("Akses dari telefon"): set `BIND_ADDR=0.0.0.0` in `.env`, open the ports in your
+See [`docs/en/DEVELOPMENT.md`](docs/en/DEVELOPMENT.md) ("Access from a phone on the same Wi-Fi"): set `BIND_ADDR=0.0.0.0` in `.env`, open the ports in your
 firewall, and browse to `http://<pc-ip>:8080`. Real GPS needs HTTPS, so use demo mode on the phone.
 
 ## Documentation
 
-Most docs are written in Bahasa Melayu.
+Every doc exists in English (`docs/en/`) and Bahasa Melayu (`docs/ms/`) with the same content.
 
 | File | Read it when |
 |---|---|
-| [`docs/FEATURES.md`](docs/FEATURES.md) | You want the feature list and what is done or missing |
-| [`docs/ROADMAP.md`](docs/ROADMAP.md) | You want to know what to build next, by priority |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | You want to know how it fits together and where code lives |
-| [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | Day-to-day workflow, recipes, pitfalls |
-| [`docs/API.md`](docs/API.md) | API endpoint reference |
-| [`docs/DESIGN.md`](docs/DESIGN.md) | UI principles, colours, branding |
+| FEATURES ([en](docs/en/FEATURES.md) · [ms](docs/ms/FEATURES.md)) | You want the feature list and what is done or missing |
+| ROADMAP ([en](docs/en/ROADMAP.md) · [ms](docs/ms/ROADMAP.md)) | You want to know what to build next, by priority |
+| ARCHITECTURE ([en](docs/en/ARCHITECTURE.md) · [ms](docs/ms/ARCHITECTURE.md)) | You want to know how it fits together and where code lives |
+| DEVELOPMENT ([en](docs/en/DEVELOPMENT.md) · [ms](docs/ms/DEVELOPMENT.md)) | Day-to-day workflow, recipes, pitfalls |
+| API ([en](docs/en/API.md) · [ms](docs/ms/API.md)) | API endpoint reference |
+| DESIGN ([en](docs/en/DESIGN.md) · [ms](docs/ms/DESIGN.md)) | UI principles, colours, branding |
 | [`CLAUDE.md`](CLAUDE.md) | Short instructions for AI assistants (Claude Code) |
 
 ## Repository layout
@@ -103,7 +105,7 @@ test/                 Flutter tests
 backend/              Go API, database migrations, tests
 docker/               web Dockerfile and nginx config
 docker-compose.yml    all services
-docs/                 documentation
+docs/en/, docs/ms/    documentation in English and Bahasa Melayu
 data/                 (git-ignored) OSM data and Valhalla tiles
 .env.example          configuration options (all have defaults)
 ```
@@ -111,11 +113,11 @@ data/                 (git-ignored) OSM data and Valhalla tiles
 ## Tests
 
 ```bash
-flutter analyze && flutter test       # needs Flutter installed (see docs/DEVELOPMENT.md)
+flutter analyze && flutter test       # needs Flutter installed (see docs/en/DEVELOPMENT.md)
 cd backend && docker run --rm -v "$PWD:/src" -w /src golang:1.26-alpine go test ./...
 ```
 
-For the real-database tests, see `docs/DEVELOPMENT.md`.
+For the real-database tests, see [`docs/en/DEVELOPMENT.md`](docs/en/DEVELOPMENT.md).
 
 ## Troubleshooting
 
@@ -126,7 +128,7 @@ For the real-database tests, see `docs/DEVELOPMENT.md`.
 | Build fails with out-of-memory | Give Docker 8 GB of RAM (Docker Desktop > Settings > Resources) |
 | Nominatim stops by itself during import | Usually not enough RAM. Check `docker compose logs nominatim` |
 | Want to start from scratch | `docker compose down -v` and `rm -rf data` (re-import takes ~1.5 hours) |
-| Phone cannot open the app | Firewall or `BIND_ADDR`. See `docs/DEVELOPMENT.md` |
+| Phone cannot open the app | Firewall or `BIND_ADDR`. See `docs/en/DEVELOPMENT.md` |
 
 The Docker project name stays `waze-revamp` (see `name:` in `docker-compose.yml`) so existing data volumes are
 not lost. It is only an internal name.

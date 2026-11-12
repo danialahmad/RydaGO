@@ -131,7 +131,7 @@ void main() {
   });
 
   group('report types (contract with backend/main.go reportSubtypes)', () {
-    // Keep identical to reportSubtypes in backend/main.go and the table in docs/API.md.
+    // Keep identical to reportSubtypes in backend/main.go and the tables in docs/en/API.md and docs/ms/API.md.
     const expected = {
       'police': ['visible', 'hidden', 'other_side'],
       'accident': ['minor', 'major', 'other_side'],

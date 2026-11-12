@@ -1,8 +1,10 @@
 # Arahan untuk pembantu AI
 
 Projek: app navigasi komuniti (Flutter web/mobile + API Go + Valhalla + Nominatim + PostGIS), Malaysia.
-Mulakan dengan `README.md`, kemudian `docs/ARCHITECTURE.md` dan `docs/DEVELOPMENT.md`..
-Senarai ciri dan keutamaan: `docs/FEATURES.md`, `docs/ROADMAP.md`.
+Mulakan dengan `README.md`, kemudian `docs/en/ARCHITECTURE.md` dan `docs/en/DEVELOPMENT.md`.
+Senarai ciri dan keutamaan: `docs/en/FEATURES.md`, `docs/en/ROADMAP.md`.
+Dokumen ada dalam dua bahasa: `docs/en/` (English) dan `docs/ms/` (Melayu), juga `README.md` dan `README.ms.md`.
+Bila mengubah dokumen, kemas kini **kedua-dua** versi dalam commit yang sama.
 
 ## Perintah
 
@@ -17,17 +19,17 @@ cd backend; docker run --rm -v "${PWD}:/src" -w /src golang:1.26-alpine sh -c "g
 
 - Teks yang pengguna nampak ada dalam **English (lalai) dan Bahasa Melayu**, sebelah-menyebelah dalam `lib/app/strings.dart` (`S`). Jangan tulis teks UI terus dalam widget; guna `S.of(context)` (atau `S(lang)` tanpa context). Komen kod dalam bahasa fail sedia ada (kebanyakan Inggeris), jelaskan *kenapa*. Jangan jalankan `dart format` pada seluruh `lib/` (gaya fail sedia ada berbeza).
 - **Kontrak jenis laporan** wujud di tiga tempat dan mesti sama: `backend/main.go` (`reportSubtypes`),
-  `lib/models/report.dart` (`ReportType`), `docs/API.md`. Ujian kedua-dua sisi menjaganya.
+  `lib/models/report.dart` (`ReportType`), `docs/en/API.md` + `docs/ms/API.md`. Ujian kedua-dua sisi menjaganya.
 - Semua panggilan HTTP dari app ada dalam `lib/services/api.dart`. Logik dalam `lib/state/`, bukan dalam widget.
   `lib/models` tulen (tiada import dari `state` atau `ui`).
 - Navigasi hanya bertindak balas kepada `userLocProvider` (GPS). Mod demo menyuntik fix; jangan tambah laluan
   pintas dalam `NavNotifier` untuk demo.
-- Hanya ikon Material. Jangan guna nama, logo atau maskot "Waze" dalam UI atau aset (lihat `docs/DESIGN.md`).
+- Hanya ikon Material. Jangan guna nama, logo atau maskot "Waze" dalam UI atau aset (lihat `docs/en/DESIGN.md`).
 - Jangan commit `.env`, `data/`, `build/`. Nilai dalam `docker-compose.yml` ialah lalai dev yang awam.
 - Tambah ujian bila menyentuh logik navigasi, API atau kontrak. Jalankan `flutter analyze` dan semua ujian sebelum melapor siap.
 - Migrasi pangkalan data: fail baru dalam `backend/migrations/`; jangan ubah yang sedia ada.
 
-## Perangkap (butiran dalam `docs/DEVELOPMENT.md`)
+## Perangkap (butiran dalam `docs/en/DEVELOPMENT.md`)
 
 - Panggilan `/route` dan `/places` memulangkan 502 sebelum Valhalla/Nominatim `healthy` (data dibina kali pertama).
 - Peta web: "tekan lama" = klik dua kali. Jangan guna `onMapClick` (klik hantu selepas widget hilang).

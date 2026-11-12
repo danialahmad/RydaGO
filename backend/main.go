@@ -24,7 +24,7 @@ var migrations embed.FS
 
 // reportSubtypes lists every report type and the subtypes it accepts. The first
 // subtype is the default the app sends. Keep in sync with ReportType in the app
-// (lib/models/report.dart); docs/API.md documents the same table.
+// (lib/models/report.dart); docs/en/API.md and docs/ms/API.md document the same table.
 var reportSubtypes = map[string][]string{
 	"police":   {"visible", "hidden", "other_side"},
 	"accident": {"minor", "major", "other_side"},

@@ -1,5 +1,7 @@
 # Senarai ciri: apa yang Waze ada, dan di mana kita berada
 
+[English](../en/FEATURES.md) · **Bahasa Melayu**
+
 Dokumen ini ialah rujukan utama untuk "apa yang patut kita bina seterusnya". Ia disusun daripada
 kajian ciri Waze (sumber di hujung), dan setiap ciri ada status dalam app kita.
 
@@ -17,7 +19,7 @@ Lajur "Perlu" menyebut apa yang perlu disediakan (backend, data, atau platform).
 | Ciri | Status | P | Nota / Perlu |
 |---|---|---|---|
 | Titik lokasi bergerak dengan halo | ✅ | | `lib/ui/map/map_view.dart` |
-| Kamera ikut dan berputar ikut arah perjalanan, condong 3D | ✅ | | Putar hanya bila laju > 5 km/j (arah GPS tak boleh dipercayai bila berhenti) |
+| Kamera ikut dan berputar ikut arah perjalanan | ✅ | | Peta rata (tanpa condong). Putar hanya bila laju > 5 km/j (arah GPS tak boleh dipercayai bila berhenti) |
 | Butang "lokasi saya" | ✅ | | |
 | Peta cerah dan gelap (tukar terus) | ✅ | | Tetapan: Auto / Cerah / Gelap. Auto ikut sistem, **bukan** matahari terbenam |
 | Letak pin dengan tekan lama (web: klik dua kali), lalu "Pergi" atau "Lapor" | ✅ | | |
@@ -47,10 +49,10 @@ Lajur "Perlu" menyebut apa yang perlu disediakan (backend, data, atau platform).
 | "Melalui <jalan>" untuk setiap laluan | ✅ | | Jalan terpanjang dalam laluan |
 | Pilihan "Elak tol" | ✅ | | Tetapan memilih laluan Tanpa tol dahulu |
 | Elak lebuh raya | ✅ | | Tetapan > Avoid highways (`use_highways: 0`). Feri tersedia dalam API (`avoid=ferries`) tetapi belum ada dalam UI |
-| Harga tol | ⬜ | 2 | Valhalla tak beri harga. Perlu jadual tol Malaysia |
-| Masalah di laluan (kerja jalan, sesak) | ⬜ | 2 | Perlu data trafik/report di sepanjang laluan |
+| Harga tol | 🟡 | 2 | Anggaran sahaja (lihat "Pengesanan tol" di bahagian 6). Perlu jadual tol Malaysia untuk harga tepat |
+| Masalah di laluan (kerja jalan, sesak) | 🟡 | 2 | Kad laluan menunjuk laporan di sepanjang laluan (`models/route_summary.dart`). Tiada data trafik sebenar |
 | Jenis kenderaan (motosikal, teksi, EV) | ⬜ | 2 | Valhalla ada costing `motorcycle`. Mudah untuk motosikal |
-| Beberapa laluan alternatif sebenar (bukan sekadar 3 keutamaan) | ⬜ | 2 | Valhalla `alternates` |
+| Beberapa laluan alternatif sebenar (bukan sekadar 3 keutamaan) | ✅ | | Valhalla `alternates` mengisi tempat sehingga 3 laluan; pendua digugurkan |
 
 ## 4. Navigasi
 
@@ -65,7 +67,6 @@ Lajur "Perlu" menyebut apa yang perlu disediakan (backend, data, atau platform).
 | Ketuk bar bawah: laluan lain dari lokasi semasa | ✅ | | Senarai dengan "jimat X min" / "lambat X min"; ketuk untuk tukar. Anak panah di kanan membuka tindakan (kongsi, senyap, tamat) |
 | Peta rata, jalan tebal, tiada bangunan 3D | ✅ | | `services/map_style.dart` |
 | Ringkasan sebelum Start (laporan di laluan) | ✅ | | Kad laluan: kamera, polis, kemalangan di sepanjang laluan |
-| Laluan alternatif sebenar | ✅ | | Sehingga 3 laluan berbeza; pendua digugurkan |
 | Arahan suara (English dan Melayu) | 🟡 | | `flutter_tts`, ikut bahasa dipilih. Bergantung suara yang ada pada peranti/pelayar (mungkin tiada suara Melayu). Belum diuji pada telefon sebenar |
 | Bar bawah: waktu tiba, baki masa dan jarak, "Melalui", kemajuan | ✅ | | Ketuk untuk kembangkan |
 | Speedometer | ✅ | | Dari GPS |
@@ -86,13 +87,13 @@ Waze ialah app komuniti; inilah ciri yang membezakannya.
 | Ciri | Status | P | Nota / Perlu |
 |---|---|---|---|
 | Menu laporan dengan jenis besar | ✅ | | `report_sheet.dart`. 6 jenis |
-| Subjenis (polis tersembunyi, trafik terhenti, lubang...) | ✅ | | Jadual penuh dalam `docs/API.md` |
+| Subjenis (polis tersembunyi, trafik terhenti, lubang...) | ✅ | | Jadual penuh dalam `docs/ms/API.md` |
 | Laporan dipaparkan di peta dengan ikon | ✅ | | Muat semula setiap 15 saat |
 | Amaran laporan berdekatan semasa memandu (visual) | ✅ | | Dalam 800 m |
 | Amaran **suara** untuk laporan di hadapan | 🟡 | | Sekali setiap laporan, dalam 600 m, hanya di jalan laluan. Belum didengar pada telefon sebenar |
 | "Masih ada?" (Ya / Tiada) untuk sahkan atau buang laporan | ✅ | | Kad muncul selepas melepasi laporan. 3 undi turun bersih menyembunyikan; undi naik melanjutkan hayat. Belum boleh undi dengan ketuk ikon di peta |
 | Laporan tamat sendiri | 🟡 | | 2 jam untuk semua jenis (dilanjutkan undi naik). Waze beza ikut jenis |
-| Cegah penyalahgunaan (spam, laporan palsu) | ⬜ | 1 | Had kadar per pengguna, undi, reputasi. **Wajib sebelum dibuka kepada orang ramai** |
+| Cegah penyalahgunaan (spam, laporan palsu) | 🟡 | 1 | Ada: had kadar (dalam ingatan), tolak pendua (jenis sama, 100 m, 10 min), undi. Belum: reputasi, had kadar dikongsi antara instans |
 | Laporan kemalangan dengan gambar, "chat peta", laporan isu peta | ⬜ | 3 | |
 | Mata dan pangkat (gamifikasi) | ⬜ | 3 | |
 | Laporan tak perlu log masuk | ❌ | | Sengaja: akaun diperlukan untuk kurangkan spam |
@@ -108,13 +109,13 @@ Waze ialah app komuniti; inilah ciri yang membezakannya.
 | Unit (km / batu) | ⬜ | 3 | |
 | Bahasa: English (lalai) dan Melayu, tukar dalam Tetapan | ✅ | | `lib/app/strings.dart`. Tambah bahasa baru = tambah nilai `AppLang` dan terjemahan dalam `S` |
 | Pengesanan tol dan anggaran harga | 🟡 | | Tol dikesan dari Valhalla (OSM). **Harga ialah anggaran** ~11 sen/km kelas 1, bukan kadar rasmi PLUS. Perlu jadual plaza-ke-plaza untuk harga tepat |
-| Padam akaun dan data | ⬜ | 1 | Diperlukan oleh kedai app dan PDPA |
+| Padam akaun dan data | ✅ | | Tetapan > Padam akaun (`DELETE /me`, perlu kata laluan). Diperlukan oleh kedai app dan PDPA |
 
 ## 7. Platform
 
 | Platform | Status | Nota |
 |---|---|---|
-| Web (Chrome, telefon melalui Wi-Fi) | ✅ | GPS sebenar perlu HTTPS atau `localhost`. Lihat `docs/DEVELOPMENT.md` |
+| Web (Chrome, telefon melalui Wi-Fi) | ✅ | GPS sebenar perlu HTTPS atau `localhost`. Lihat `docs/ms/DEVELOPMENT.md` |
 | Android | 🟡 | Kebenaran lokasi dan internet ditambah. **Belum pernah dijalankan** pada peranti. Untuk emulator guna `API_URL=http://10.0.2.2:8081` |
 | iOS | ⬜ | Platform tak dijana (`flutter create --platforms=ios`). Perlu Mac |
 | Android Auto / CarPlay | ⬜ | Kerja besar, platform berasingan |
@@ -122,8 +123,8 @@ Waze ialah app komuniti; inilah ciri yang membezakannya.
 
 ## Cadangan urutan kerja
 
-Lihat `docs/ROADMAP.md`. Ringkasnya: **keselamatan data dahulu** (anti-spam, undi "masih ada?",
-padam akaun), kemudian **pengalaman memandu sebenar** (latar belakang, skrin hidup, had laju),
+Lihat `docs/ms/ROADMAP.md`. Ringkasnya: **habiskan keselamatan** (CORS, rahsia sebenar, had kadar dikongsi),
+kemudian **pengalaman memandu sebenar** (latar belakang, skrin hidup, had laju),
 kemudian **kandungan** (POI, trafik).
 
 ## Sumber kajian

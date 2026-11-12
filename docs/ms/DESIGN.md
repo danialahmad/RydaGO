@@ -1,5 +1,7 @@
 # Reka bentuk UI
 
+[English](../en/DESIGN.md) · **Bahasa Melayu**
+
 Matlamat: **mudah dipakai semasa memandu**, dengan rasa yang biasa kepada pengguna app navigasi
 komuniti, tetapi dengan identiti dan ikon sendiri.
 

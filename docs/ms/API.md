@@ -1,5 +1,7 @@
 # Rujukan API
 
+[English](../en/API.md) · **Bahasa Melayu**
+
 Pangkalan: `http://localhost:8081` (atau `http://<ip-pc>:8081`). Semua respons JSON.
 Ralat dalam bentuk `{"error": "mesej"}`.
 
@@ -90,7 +92,7 @@ Badan: `{"password": "..."}` (disahkan semula). Memadam pengguna, semua laporann
 ### Jenis dan subjenis laporan
 
 Subjenis pertama ialah lalai yang dihantar app. **Jadual ini mesti sama** dengan `reportSubtypes` dalam
-`backend/main.go` dan `ReportType` dalam `lib/models/report.dart`. Ujian di kedua-dua sisi akan gagal jika berbeza.
+`backend/main.go`, `ReportType` dalam `lib/models/report.dart` dan jadual dalam `docs/en/API.md`. Ujian di kedua-dua sisi akan gagal jika berbeza.
 
 | `type` | Label dalam app | `subtype` yang dibenarkan |
 |---|---|---|
@@ -160,7 +162,7 @@ Minta Valhalla tiga kali selari. Pulangkan hanya yang berjaya.
 `lib/models/place.dart`). `400` jika `q` terlalu pendek atau panjang; `502` jika Nominatim tak sedia.
 
 > Nominatim diimport dengan gaya `address` secara lalai, jadi **tempat seperti masjid dan pusat beli-belah
-> tiada** (hanya jalan, kawasan, alamat). Lihat `docs/FEATURES.md`.
+> tiada** (hanya jalan, kawasan, alamat). Lihat `docs/ms/FEATURES.md`.
 
 ## Contoh dengan curl
 

@@ -35,7 +35,7 @@ class WrongPasswordException implements Exception {
   const WrongPasswordException();
 }
 
-/// Everything the app asks the Go API for. See docs/API.md for the endpoints.
+/// Everything the app asks the Go API for. See docs/en/API.md for the endpoints.
 class Api {
   const Api._();
 

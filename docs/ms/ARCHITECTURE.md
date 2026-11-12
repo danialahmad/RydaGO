@@ -1,5 +1,7 @@
 # Seni bina
 
+[English](../en/ARCHITECTURE.md) · **Bahasa Melayu**
+
 Gambaran keseluruhan, supaya anda tahu **di mana** nak ubah sesuatu sebelum membuka kod.
 
 ## Gambaran besar
@@ -42,10 +44,18 @@ Satu pakej Go (`package main`), tanpa lapisan tambahan kerana ia masih kecil.
 |---|---|
 | `main.go` | Penghala chi, migrasi goose semasa mula, `/health`, `/reports`, jadual jenis dan subjenis laporan, CORS |
 | `auth.go` | Daftar, log masuk (bcrypt), JWT HS256 7 hari, middleware `requireAuth` |
-| `route.go` | `/route`: tiga panggilan selari ke Valhalla, nyahkod polyline6, bina teks belokan (English atau Melayu, `lang.go`) dan anggaran tol (`toll.go`) |
+| `route.go` | `/route`: tiga panggilan selari ke Valhalla, nyahkod polyline6, had laju (`traceLimits`), gugurkan pendua |
+| `lang.go` | Teks belokan dalam English atau Melayu (`maneuverText`) |
+| `signs.go` | Papan tanda keluar (`exit`, `toward`) dan lorong daripada Valhalla |
+| `toll.go` | Anggaran harga tol (`TOLL_RM_PER_KM`, `TOLL_MIN_RM`) |
+| `votes.go` | `/reports/{id}/vote`: "Masih ada?" |
+| `accounts.go` | Padam laporan sendiri, padam akaun (`DELETE /me`) |
+| `shares.go` | Kongsi perjalanan langsung: `/shares` dan halaman `/s/{token}` |
+| `ratelimit.go` | Had kadar baldi token, dalam ingatan |
 | `places.go` | `/places`: proksi ke Nominatim, ringkaskan respons |
 | `migrations/` | SQL goose, dibenamkan dalam binari (`//go:embed`). Berjalan automatik bila API bermula |
 | `*_test.go` | Ujian unit. Valhalla dan Nominatim digantikan pelayan palsu `httptest` |
+| `integration_test.go` | Ujian dengan PostgreSQL sebenar; dilangkau tanpa `TEST_DATABASE_URL` |
 
 Skema pangkalan data (hasil `migrations/`):
 
@@ -66,7 +76,8 @@ Keputusan penting:
 
 - **Teks belokan dibina di API** (`maneuverText` dalam `lang.go`) dalam English atau Melayu ikut `?lang=`, kerana Valhalla
   tak menyokong bahasa Melayu. Suara dan banner menggunakan teks yang sama. Teks lain dalam app ada dalam `lib/app/strings.dart`.
-- **Tiga laluan = tiga panggilan Valhalla** (`routeVariants`): biasa, `use_tolls: 0`, `shortest: true`.
+- **Tiga laluan = tiga panggilan Valhalla** (`routeVariants`): biasa (dengan 2 `alternates`), `use_tolls: 0`,
+  `shortest: true`. Pendua digugurkan, dan alternatif Valhalla mengisi tempat kosong sehingga 3 laluan.
   Kalau satu gagal, yang lain tetap dipulangkan.
 - **JWT**: `JWT_SECRET` wajib dan mesti 32+ aksara, kalau tidak API enggan bermula.
   Log masuk memulangkan mesej sama untuk "email tak wujud" dan "kata laluan salah"
@@ -79,31 +90,36 @@ lib/
   main.dart                  titik masuk: ProviderScope + MaterialApp + tema
   app/
     config.dart              alamat API, gaya peta, lokasi sandaran (KLCC)
+    strings.dart             S: semua teks UI, English dan Melayu
     theme.dart               warna (AppColors) dan ThemeData cerah/gelap
     format.dart              formatDistance / formatDuration / formatClock
   models/                    data tulen, tiada Flutter widget (kecuali IconData)
-    geo.dart                 haversineM, routeCumulative
+    geo.dart                 haversineM, routeCumulative, navZoom
     place.dart               Place, ikon ikut kategori Nominatim
     report.dart              ReportType (+ subjenis), Report
     route.dart               RouteOption, Maneuver
+    route_summary.dart       laporan di sepanjang laluan (ringkasan sebelum Mula, kelewatan anggaran)
     user_loc.dart            UserLoc (fix, laju, arah, ketepatan)
   services/
     api.dart                 SEMUA panggilan HTTP ke API kita
+    map_style.dart           ubah gaya OpenFreeMap: peta rata, jalan tebal, tiada bangunan 3D
     voice.dart               Speaker (TTS) dan VoicePlanner (bila nak bercakap)
   state/                     Riverpod: logik dan keadaan aplikasi
     user_loc.dart            GPS (geolocator) + suntikan fix untuk mod demo
     auth.dart                token disimpan dalam shared_preferences
-    settings.dart            tema, suara, elak tol
+    settings.dart            tema, suara, elak tol/lebuh raya, amaran laju
     saved_places.dart        Rumah, Kerja, kegemaran, terbaru
     trip.dart                destinasi, laluan, pilihan laluan, pin, "sedang navigasi"
     reports.dart             muat laporan berdekatan (setiap 15 s) dan hantar laporan
     navigation.dart          NavNotifier: fix GPS menjadi kemajuan, tiba, kira semula
+    alternatives.dart        cadangan laluan lebih pantas semasa memandu, senarai laluan lain
+    share.dart               kongsi perjalanan langsung (kemas kini setiap 10 s)
     demo.dart                mod demo: DemoDriver menghantar fix palsu
     voice.dart               sambung navigasi ke suara
   ui/
     screens/                 map_screen, search_screen, settings_screen, login_screen
     map/                     map_view (MapLibre + lapisan), marker_images (ikon penanda)
-    widgets/                 panel bawah, pratonton laluan, banner, laporan, butang
+    widgets/                 panel bawah, pratonton laluan, banner, laporan, laluan alternatif, butang
 ```
 
 Peraturan susunan: `models` tak import apa-apa daripada `state` atau `ui`; `state` tak import `ui`;
@@ -159,7 +175,7 @@ sepanjang laluan, supaya logik di atas diuji tanpa memandu. `NavNotifier` tak ta
 
 | Data | Tempat |
 |---|---|
-| Pengguna, laporan | PostgreSQL (volum Docker `pgdata`) |
+| Pengguna, laporan, undi, kongsi | PostgreSQL (volum Docker `pgdata`) |
 | Data OSM Valhalla dan jubin laluan | `./data/valhalla` (diabaikan git) |
 | Pangkalan data Nominatim | volum Docker `nominatim-data` |
 | Token log masuk, tetapan, Rumah/Kerja/kegemaran/terbaru | `shared_preferences` pada peranti (localStorage di web) |
@@ -169,7 +185,8 @@ sepanjang laluan, supaya logik di atas diuji tanpa memandu. `NavNotifier` tak ta
 - **CORS dibuka kepada `*`** (`cors` dalam `main.go`). Ketatkan sebelum deploy.
 - Nilai dev dalam compose (`wazedev`, JWT dev) ialah **awam**. Tetapkan nilai sebenar dalam `.env`.
 - Had kadar ialah dalam ingatan (`ratelimit.go`): ia ditetapkan semula bila API dimulakan semula dan tidak dikongsi antara instans.
-- Tiada ujian yang menyentuh pangkalan data sebenar (daftar, log masuk, simpan/baca laporan).
+- Ujian pangkalan data sebenar (`integration_test.go`) hanya berjalan bila `TEST_DATABASE_URL` ditetapkan, jadi
+  `go test` biasa melangkaunya (lihat `docs/ms/DEVELOPMENT.md`).
 - Tiada ujian widget/skrin Flutter, hanya ujian logik.
 - `web/index.html` ada skrip kecil yang meruntuhkan kredit peta pada permulaan. Ia bergantung pada nama kelas CSS
   MapLibre dan mungkin perlu dikemas kini bila plugin dinaik taraf.
